@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Patient Monitoring{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <h2><i class="fas fa-tachometer-alt"></i> Admin Dashboard</h2>
+    <p class="text-muted">Overview of all monitored beds and system status</p>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card card-kpi">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">Total Beds</h6>
+                        <h2 class="mb-0" id="statTotalBeds">-</h2>
+                    </div>
+                    <div class="icon-circle bg-primary">
+                        <i class="fas fa-bed text-white"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card card-kpi">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">New Alerts</h6>
+                        <h2 class="mb-0" id="statNewAlerts">-</h2>
+                    </div>
+                    <div class="icon-circle bg-danger">
+                        <i class="fas fa-exclamation-triangle text-white"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card card-kpi">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">Devices Online</h6>
+                        <h2 class="mb-0" id="statDevicesOnline">-</h2>
+                    </div>
+                    <div class="icon-circle bg-success">
+                        <i class="fas fa-wifi text-white"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card card-kpi">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-2">Active Nurses</h6>
+                        <h2 class="mb-0" id="statActiveNurses">-</h2>
+                    </div>
+                    <div class="icon-circle bg-info">
+                        <i class="fas fa-user-nurse text-white"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Live Bed Status and Alerts -->
+<div class="row mb-4">
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-bed"></i> Live Bed Status</h5>
+            </div>
+            <div class="card-body">
+                <div id="bedsContainer" class="row">
+                    <p class="text-center text-muted">Loading beds...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-bell"></i> Recent Alerts</h5>
+                <button class="btn btn-sm btn-danger" onclick="clearAllAlerts()">
+                    <i class="fas fa-trash"></i> Clear
+                </button>
+            </div>
+            <div class="card-body" style="max-height: 350px; overflow-y: auto; border-radius: 8px;">
+                <div id="alertsContainer">
+                    <p class="text-center text-muted">Loading alerts...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-line"></i> Average Temperature (Last 24h)</h5>
+            </div>
+            <div class="card-body">
+                <div style="height: 300px; position: relative;">
+                    <canvas id="temperatureChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Alerts by Type</h5>
+            </div>
+            <div class="card-body">
+                <div style="height: 300px; position: relative;">
+                    <canvas id="alertsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+    // Load stats on page load
+    function loadStats() {
+        fetch('/api/stats/overview')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('statTotalBeds').textContent = data.total_beds || 0;
+                document.getElementById('statNewAlerts').textContent = data.new_alerts_today || 0;
+                document.getElementById('statDevicesOnline').textContent = data.devices_online || 0;
+                document.getElementById('statActiveNurses').textContent = data.active_nurses || 0;
+            });
+    }
+    
+    // Load beds
+    function loadBeds() {
+        fetch('/api/latest_readings')
+            .then(r => r.json())
+            .then(data => {
+                const container = document.getElementById('bedsContainer');
+                if (data.length === 0) {
+                    container.innerHTML = '<p class="text-center text-muted">No beds available</p>';
+                    return;
+                }
+                
+                container.innerHTML = '';
+                data.forEach(bed => {
+                    // Determine status color based on alerts
+                    const alertType = bed.latest_alert_type || '';
+                    const alertCount = bed.active_alert_count || 0;
+                    let statusClass = 'border-success';
+                    let statusIcon = 'fa-check-circle';
+                    let statusText = 'Normal';
+                    let statusColor = 'success';
+                    
+                    if (alertCount > 0) {
+                        if (alertType === 'bed_exit' || alertType === 'possible_fall') {
+                            statusClass = 'border-danger';
+                            statusIcon = 'fa-exclamation-triangle';
+                            statusText = 'Critical';
+                            statusColor = 'danger';
+                        } else if (alertType === 'fever_warning' || alertType === 'high_temperature') {
+                            statusClass = 'border-warning';
+                            statusIcon = 'fa-thermometer-half';
+                            statusText = 'Warning';
+                            statusColor = 'warning';
+                        } else {
+                            statusClass = 'border-warning';
+                            statusIcon = 'fa-exclamation-circle';
+                            statusText = 'Alert';
+                            statusColor = 'warning';
+                        }
+                    }
+                    
+                    const card = document.createElement('div');
+                    card.className = 'col-md-6 mb-3';
+                    card.innerHTML = `
+                        <div class="card h-100 ${statusClass} border-start border-4">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <h6 class="card-title mb-0">${bed.bed_name || 'Bed ' + bed.bed_id}</h6>
+                                        <p class="text-muted small mb-0">Room: ${bed.room_no || 'N/A'}</p>
+                                    </div>
+                                    <span class="badge bg-${statusColor}">
+                                        <i class="fas ${statusIcon}"></i> ${statusText}
+                                    </span>
+                                </div>
+                                ${alertCount > 0 ? `<div class="alert alert-${statusColor} alert-sm py-1 px-2 mb-2"><small><i class="fas fa-bell"></i> ${alertCount} active alert${alertCount > 1 ? 's' : ''}</small></div>` : ''}
+                                <div class="row text-center">
+                                    <div class="col-6">
+                                        <small class="text-muted">Temp</small>
+                                        <div><strong>${bed.temperature ? bed.temperature.toFixed(1) + '°C' : 'N/A'}</strong></div>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Humidity</small>
+                                        <div><strong>${bed.humidity ? bed.humidity.toFixed(1) + '%' : 'N/A'}</strong></div>
+                                    </div>
+                                </div>
+                                <a href="/beds/${bed.bed_id}" class="btn btn-sm btn-primary mt-2 w-100">View Details</a>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            });
+    }
+    
+    // Load alerts
+    function loadAlerts() {
+        fetch('/api/alerts?status=new')
+            .then(r => r.json())
+            .then(data => {
+                const container = document.getElementById('alertsContainer');
+                if (data.length === 0) {
+                    container.innerHTML = '<p class="text-center text-muted">No new alerts</p>';
+                    return;
+                }
+                
+                container.innerHTML = '';
+                data.slice(0, 3).forEach(alert => {
+                    const item = document.createElement('div');
+                    item.className = 'alert-item mb-2 p-2 border-start border-3 border-danger';
+                    item.innerHTML = `
+                        <small class="text-muted">${new Date(alert.created_at).toLocaleString()}</small>
+                        <div><strong>${alert.bed_name}</strong></div>
+                        <div class="small">${alert.message}</div>
+                    `;
+                    container.appendChild(item);
+                });
+                
+                // Show total count if more than 3
+                if (data.length > 3) {
+                    const moreItem = document.createElement('div');
+                    moreItem.className = 'text-center py-2 border-top';
+                    moreItem.innerHTML = `<small class="text-muted">+${data.length - 3} more alerts</small>`;
+                    container.appendChild(moreItem);
+                }
+            });
+    }
+    
+    // Clear all alerts
+    function clearAllAlerts() {
+        const confirmed = confirm('Are you sure you want to clear all alerts? This action cannot be undone.');
+        if (!confirmed) return;
+        
+        fetch('/api/alerts/clear/all', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed bottom-0 end-0 m-3';
+                    alertDiv.style.zIndex = '9999';
+                    alertDiv.innerHTML = `
+                        <strong>Success!</strong> All alerts have been cleared.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.body.appendChild(alertDiv);
+                    
+                    setTimeout(() => {
+                        const alert = new bootstrap.Alert(alertDiv);
+                        alert.close();
+                    }, 5000);
+                    
+                    loadAlerts();
+                }
+            })
+            .catch(err => {
+                alert('Error clearing alerts: ' + err.message);
+            });
+    }
+    
+    // Initialize temperature chart
+    let tempChart = null;
+    function loadTemperatureChart() {
+        fetch('/api/charts/temperature')
+            .then(r => r.json())
+            .then(data => {
+                const canvasElement = document.getElementById('temperatureChart');
+                if (!canvasElement) return;
+                
+                if (tempChart) tempChart.destroy();
+                tempChart = initAverageTemperatureChart(canvasElement.getContext('2d'), data);
+            })
+            .catch(err => console.error('Error loading temperature chart:', err));
+    }
+    
+    // Initialize alerts chart
+    let alertsChart = null;
+    function loadAlertsChart() {
+        fetch('/api/charts/alerts')
+            .then(r => r.json())
+            .then(data => {
+                const canvasElement = document.getElementById('alertsChart');
+                if (!canvasElement) return;
+                
+                if (alertsChart) alertsChart.destroy();
+                alertsChart = initAlertsBarChart(canvasElement.getContext('2d'), data);
+            })
+            .catch(err => console.error('Error loading alerts chart:', err));
+    }
+    
+    window.clearAllAlerts = clearAllAlerts;
+    
+    // Initialize
+    loadStats();
+    loadBeds();
+    loadAlerts();
+    loadTemperatureChart();
+    loadAlertsChart();
+    
+    // Refresh every 10 seconds
+    setInterval(() => {
+        loadStats();
+        loadBeds();
+        loadAlerts();
+        loadTemperatureChart();
+        loadAlertsChart();
+    }, 10000);
+</script>
+{% endblock %}
+

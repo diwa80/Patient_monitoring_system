@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Patient Monitoring{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <h2><i class="fas fa-cog"></i> System Settings</h2>
+    <p class="text-muted">Configure alert thresholds and system parameters for optimal monitoring</p>
+</div>
+
+<form method="POST" action="{{ url_for('settings_page') }}" id="settingsForm">
+    <!-- Temperature Settings -->
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card settings-card">
+                <div class="card-header settings-card-header">
+                    <i class="fas fa-thermometer-half text-danger"></i>
+                    <h5 class="mb-0">Temperature Monitoring</h5>
+                </div>
+                <div class="card-body">
+                    <div class="setting-group">
+                        <label for="temp_min" class="form-label">
+                            <i class="fas fa-arrow-down"></i> Minimum Temperature
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.1" class="form-control" id="temp_min" name="temp_min" required>
+                            <span class="input-group-text">°C</span>
+                        </div>
+                        <small class="text-muted">Alert if temperature drops below this value</small>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label for="temp_max" class="form-label">
+                            <i class="fas fa-arrow-up"></i> Maximum Temperature
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.1" class="form-control" id="temp_max" name="temp_max" required>
+                            <span class="input-group-text">°C</span>
+                        </div>
+                        <small class="text-muted">Alert if temperature rises above this value</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Humidity Settings -->
+        <div class="col-lg-6">
+            <div class="card settings-card">
+                <div class="card-header settings-card-header">
+                    <i class="fas fa-droplet text-info"></i>
+                    <h5 class="mb-0">Humidity Monitoring</h5>
+                </div>
+                <div class="card-body">
+                    <div class="setting-group">
+                        <label for="humidity_min" class="form-label">
+                            <i class="fas fa-arrow-down"></i> Minimum Humidity
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.1" class="form-control" id="humidity_min" name="humidity_min" required>
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <small class="text-muted">Alert if humidity drops below this value</small>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label for="humidity_max" class="form-label">
+                            <i class="fas fa-arrow-up"></i> Maximum Humidity
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.1" class="form-control" id="humidity_max" name="humidity_max" required>
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <small class="text-muted">Alert if humidity rises above this value</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Motion & Distance Settings -->
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card settings-card">
+                <div class="card-header settings-card-header">
+                    <i class="fas fa-door-open text-warning"></i>
+                    <h5 class="mb-0">Bed Exit Detection</h5>
+                </div>
+                <div class="card-body">
+                    <div class="setting-group">
+                        <label for="distance_bed_exit_cm" class="form-label">
+                            <i class="fas fa-ruler"></i> Exit Distance Threshold
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.1" class="form-control" id="distance_bed_exit_cm" name="distance_bed_exit_cm" required>
+                            <span class="input-group-text">cm</span>
+                        </div>
+                        <small class="text-muted">Alert when distance exceeds this value with motion detected</small>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label for="no_motion_timeout_minutes" class="form-label">
+                            <i class="fas fa-clock"></i> No Motion Timeout
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="1" class="form-control" id="no_motion_timeout_minutes" name="no_motion_timeout_minutes" required>
+                            <span class="input-group-text">minutes</span>
+                        </div>
+                        <small class="text-muted">Alert if no motion is detected for this duration</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fall Detection Settings -->
+        <div class="col-lg-6">
+            <div class="card settings-card">
+                <div class="card-header settings-card-header">
+                    <i class="fas fa-arrow-trend-down text-danger"></i>
+                    <h5 class="mb-0">Fall Detection</h5>
+                </div>
+                <div class="card-body">
+                    <div class="setting-group">
+                        <label for="fall_drop_threshold_cm" class="form-label">
+                            <i class="fas fa-gauge"></i> Drop Threshold
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.1" class="form-control" id="fall_drop_threshold_cm" name="fall_drop_threshold_cm" required>
+                            <span class="input-group-text">cm</span>
+                        </div>
+                        <small class="text-muted">Sudden distance drop indicating possible fall</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fever & Restlessness Settings -->
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card settings-card">
+                <div class="card-header settings-card-header">
+                    <i class="fas fa-fire text-danger"></i>
+                    <h5 class="mb-0">Fever Detection</h5>
+                </div>
+                <div class="card-body">
+                    <div class="setting-group">
+                        <label for="fever_temp_threshold" class="form-label">
+                            <i class="fas fa-thermometer-half"></i> Fever Threshold
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.1" class="form-control" id="fever_temp_threshold" name="fever_temp_threshold" required>
+                            <span class="input-group-text">°C</span>
+                        </div>
+                        <small class="text-muted">Absolute temperature indicating fever</small>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label for="fever_temp_increase" class="form-label">
+                            <i class="fas fa-arrow-up"></i> Temperature Increase
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.1" class="form-control" id="fever_temp_increase" name="fever_temp_increase" required>
+                            <span class="input-group-text">°C</span>
+                        </div>
+                        <small class="text-muted">Sudden temperature rise indicating fever</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Restlessness Settings -->
+        <div class="col-lg-6">
+            <div class="card settings-card">
+                <div class="card-header settings-card-header">
+                    <i class="fas fa-person-hiking text-primary"></i>
+                    <h5 class="mb-0">Activity Monitoring</h5>
+                </div>
+                <div class="card-body">
+                    <div class="setting-group">
+                        <label for="restlessness_motions_per_hour" class="form-label">
+                            <i class="fas fa-wave-square"></i> Restlessness Threshold
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.1" class="form-control" id="restlessness_motions_per_hour" name="restlessness_motions_per_hour" required>
+                            <span class="input-group-text">motions/hour</span>
+                        </div>
+                        <small class="text-muted">Alert if motion rate exceeds this during night hours</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Humidity Danger Levels -->
+    <div class="row mb-4">
+        <div class="col-lg-12">
+            <div class="card settings-card">
+                <div class="card-header settings-card-header">
+                    <i class="fas fa-exclamation-circle text-warning"></i>
+                    <h5 class="mb-0">Critical Humidity Levels</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="setting-group">
+                                <label for="low_humidity_danger" class="form-label">
+                                    <i class="fas fa-arrow-down"></i> Low Humidity Danger
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" step="0.1" class="form-control" id="low_humidity_danger" name="low_humidity_danger" required>
+                                    <span class="input-group-text">%</span>
+                                </div>
+                                <small class="text-muted">Dangerously low humidity for patient breathing</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="setting-group">
+                                <label for="high_humidity_danger" class="form-label">
+                                    <i class="fas fa-arrow-up"></i> High Humidity Danger
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" step="0.1" class="form-control" id="high_humidity_danger" name="high_humidity_danger" required>
+                                    <span class="input-group-text">%</span>
+                                </div>
+                                <small class="text-muted">Dangerously high humidity for patient breathing</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-save"></i> Save Settings
+                </button>
+                <button type="reset" class="btn btn-secondary btn-lg">
+                    <i class="fas fa-redo"></i> Reset Form
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+
+<style>
+.settings-card {
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 0;
+    transition: var(--transition);
+}
+
+.settings-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-4px);
+}
+
+.settings-card-header {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-bottom: 2px solid var(--border-color);
+    padding: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.settings-card-header i {
+    font-size: 1.5rem;
+    min-width: 24px;
+}
+
+.settings-card-header h5 {
+    color: var(--text-primary);
+    font-weight: 700;
+    letter-spacing: -0.3px;
+}
+
+.setting-group {
+    margin-bottom: 1.25rem;
+}
+
+.setting-group:last-child {
+    margin-bottom: 0;
+}
+
+.setting-group .form-label {
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.setting-group .form-label i {
+    color: var(--color-primary);
+    font-size: 1rem;
+}
+
+.input-group-text {
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+    border-color: var(--border-color);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.form-control:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
+}
+
+.btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: var(--transition);
+}
+
+.btn-lg:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.btn-lg i {
+    margin-right: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .settings-card-header {
+        flex-direction: column;
+        text-align: center;
+        align-items: center;
+    }
+    
+    .settings-card-header h5 {
+        margin-top: 0.5rem;
+    }
+    
+    .setting-group .form-label {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .btn-lg {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Load current settings
+    fetch('/api/settings')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('temp_min').value = data.temp_min || 18.0;
+            document.getElementById('temp_max').value = data.temp_max || 24.0;
+            document.getElementById('humidity_min').value = data.humidity_min || 40.0;
+            document.getElementById('humidity_max').value = data.humidity_max || 60.0;
+            document.getElementById('distance_bed_exit_cm').value = data.distance_bed_exit_cm || 50.0;
+            document.getElementById('no_motion_timeout_minutes').value = data.no_motion_timeout_minutes || 30;
+            document.getElementById('fall_drop_threshold_cm').value = data.fall_drop_threshold_cm || 30.0;
+            document.getElementById('restlessness_motions_per_hour').value = data.restlessness_motions_per_hour || 20.0;
+            document.getElementById('fever_temp_threshold').value = data.fever_temp_threshold || 37.5;
+            document.getElementById('fever_temp_increase').value = data.fever_temp_increase || 1.5;
+            document.getElementById('low_humidity_danger').value = data.low_humidity_danger || 30.0;
+            document.getElementById('high_humidity_danger').value = data.high_humidity_danger || 70.0;
+        })
+        .catch(err => console.error('Error loading settings:', err));
+
+    // Form submission feedback
+    document.getElementById('settingsForm').addEventListener('submit', function(e) {
+        const btn = this.querySelector('button[type="submit"]');
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        btn.disabled = true;
+
+        setTimeout(() => {
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+        }, 2000);
+    });
+</script>
+{% endblock %}
+

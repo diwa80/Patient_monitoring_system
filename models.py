@@ -1,0 +1,457 @@
+"""
+Data models and helper functions for Patient Monitoring System
+"""
+
+import sqlite3
+from database import get_db
+import json
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timedelta
+
+# ==================== USER MANAGEMENT ====================
+
+def create_user(username, password, role='nurse', menu_permissions=None):
+    """Create a new user with hashed password and optional menu permissions
+
+    `menu_permissions` should be a list of permission keys; stored as JSON string.
+    """
+    db = get_db()
+    try:
+        password_hash = generate_password_hash(password)
+        perms_json = json.dumps(menu_permissions) if menu_permissions else None
+        cursor = db.execute(
+            'INSERT INTO users (username, password_hash, role, menu_permissions) VALUES (?, ?, ?, ?)',
+            (username, password_hash, role, perms_json)
+        )
+        db.commit()
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        return None
+    finally:
+        db.close()
+
+def get_user_by_username(username):
+    """Get user by username"""
+    db = get_db()
+    try:
+        user = db.execute(
+            'SELECT * FROM users WHERE username = ?',
+            (username,)
+        ).fetchone()
+        return dict(user) if user else None
+    finally:
+        db.close()
+
+def verify_password(user, password):
+    """Verify password against stored hash"""
+    return check_password_hash(user['password_hash'], password)
+
+def list_nurses():
+    """Get all users with role 'nurse'"""
+    db = get_db()
+    try:
+        nurses = db.execute(
+            'SELECT * FROM users WHERE role = ? ORDER BY username',
+            ('nurse',)
+        ).fetchall()
+        return [dict(n) for n in nurses]
+    finally:
+        db.close()
+
+def list_all_users():
+    """Get all users"""
+    db = get_db()
+    try:
+        users = db.execute('SELECT * FROM users ORDER BY username').fetchall()
+        return [dict(u) for u in users]
+    finally:
+        db.close()
+
+def toggle_user_status(user_id):
+    """Toggle user status between active and disabled"""
+    db = get_db()
+    try:
+        user = db.execute('SELECT status FROM users WHERE id = ?', (user_id,)).fetchone()
+        if user:
+            new_status = 'disabled' if user['status'] == 'active' else 'active'
+            db.execute('UPDATE users SET status = ? WHERE id = ?', (new_status, user_id))
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+def update_user_password(user_id, new_password):
+    """Update user password"""
+    db = get_db()
+    try:
+        password_hash = generate_password_hash(new_password)
+        db.execute('UPDATE users SET password_hash = ? WHERE id = ?', (password_hash, user_id))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+def update_user(user_id, username, role, menu_permissions=None):
+    """Update user basic fields and menu permissions. Returns True on success, False if username conflict."""
+    db = get_db()
+    try:
+        perms_json = json.dumps(menu_permissions) if menu_permissions else None
+        db.execute('UPDATE users SET username = ?, role = ?, menu_permissions = ? WHERE id = ?',
+                   (username, role, perms_json, user_id))
+        db.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        db.close()
+
+def delete_user(user_id):
+    """Delete a user and related nurse assignments."""
+    db = get_db()
+    try:
+        db.execute('DELETE FROM nurse_assignments WHERE nurse_id = ?', (user_id,))
+        db.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+# ==================== BED MANAGEMENT ====================
+
+def list_beds():
+    """Get all beds"""
+    db = get_db()
+    try:
+        beds = db.execute('SELECT * FROM beds ORDER BY bed_name').fetchall()
+        return [dict(b) for b in beds]
+    finally:
+        db.close()
+
+def get_bed(bed_id):
+    """Get bed by ID"""
+    db = get_db()
+    try:
+        bed = db.execute('SELECT * FROM beds WHERE id = ?', (bed_id,)).fetchone()
+        return dict(bed) if bed else None
+    finally:
+        db.close()
+
+def create_bed(bed_name, room_no=None):
+    """Create a new bed"""
+    db = get_db()
+    try:
+        cursor = db.execute(
+            'INSERT INTO beds (bed_name, room_no) VALUES (?, ?)',
+            (bed_name, room_no)
+        )
+        db.commit()
+        return cursor.lastrowid
+    finally:
+        db.close()
+
+# ==================== NURSE ASSIGNMENTS ====================
+
+def assign_nurse_to_bed(nurse_id, bed_id):
+    """Assign a nurse to a bed"""
+    db = get_db()
+    try:
+        db.execute(
+            'INSERT OR IGNORE INTO nurse_assignments (nurse_id, bed_id) VALUES (?, ?)',
+            (nurse_id, bed_id)
+        )
+        db.commit()
+        return True
+    except:
+        return False
+    finally:
+        db.close()
+
+def unassign_nurse_from_bed(nurse_id, bed_id):
+    """Unassign a nurse from a bed"""
+    db = get_db()
+    try:
+        db.execute(
+            'DELETE FROM nurse_assignments WHERE nurse_id = ? AND bed_id = ?',
+            (nurse_id, bed_id)
+        )
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+def get_nurse_beds(nurse_id):
+    """Get all beds assigned to a nurse"""
+    db = get_db()
+    try:
+        beds = db.execute('''
+            SELECT b.* FROM beds b
+            INNER JOIN nurse_assignments na ON b.id = na.bed_id
+            WHERE na.nurse_id = ?
+            ORDER BY b.bed_name
+        ''', (nurse_id,)).fetchall()
+        return [dict(b) for b in beds]
+    finally:
+        db.close()
+
+def get_bed_nurses(bed_id):
+    """Get all nurses assigned to a bed"""
+    db = get_db()
+    try:
+        nurses = db.execute('''
+            SELECT u.* FROM users u
+            INNER JOIN nurse_assignments na ON u.id = na.nurse_id
+            WHERE na.bed_id = ?
+            ORDER BY u.username
+        ''', (bed_id,)).fetchall()
+        return [dict(n) for n in nurses]
+    finally:
+        db.close()
+
+# ==================== READINGS ====================
+
+def insert_reading(bed_id, temperature=None, humidity=None, motion=None, distance_cm=None):
+    """Insert a new sensor reading"""
+    db = get_db()
+    try:
+        cursor = db.execute('''
+            INSERT INTO readings (bed_id, temperature, humidity, motion, distance_cm)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (bed_id, temperature, humidity, motion, distance_cm))
+        db.commit()
+        return cursor.lastrowid
+    finally:
+        db.close()
+
+def get_latest_readings_per_bed():
+    """Get latest reading for each bed with alert status"""
+    db = get_db()
+    try:
+        readings = db.execute('''
+            SELECT r.*, b.bed_name, b.room_no,
+                   (SELECT COUNT(*) FROM alerts a 
+                    WHERE a.bed_id = r.bed_id AND a.status = 'new') as active_alert_count,
+                   (SELECT alert_type FROM alerts a 
+                    WHERE a.bed_id = r.bed_id AND a.status = 'new' 
+                    ORDER BY a.created_at DESC LIMIT 1) as latest_alert_type
+            FROM readings r
+            INNER JOIN beds b ON r.bed_id = b.id
+            WHERE r.id IN (
+                SELECT MAX(id) FROM readings GROUP BY bed_id
+            )
+            ORDER BY b.bed_name
+        ''').fetchall()
+        return [dict(r) for r in readings]
+    finally:
+        db.close()
+
+def get_readings_for_bed(bed_id, hours=24, limit=1000):
+    """Get readings for a specific bed within time range"""
+    db = get_db()
+    try:
+        cutoff = datetime.now() - timedelta(hours=hours)
+        readings = db.execute('''
+            SELECT * FROM readings
+            WHERE bed_id = ? AND timestamp >= ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+        ''', (bed_id, cutoff.isoformat(), limit)).fetchall()
+        return [dict(r) for r in readings]
+    finally:
+        db.close()
+
+# ==================== ALERTS ====================
+
+def create_alert(bed_id, alert_type, message):
+    """Create a new alert"""
+    db = get_db()
+    try:
+        cursor = db.execute('''
+            INSERT INTO alerts (bed_id, alert_type, message, status)
+            VALUES (?, ?, ?, 'new')
+        ''', (bed_id, alert_type, message))
+        db.commit()
+        return cursor.lastrowid
+    finally:
+        db.close()
+
+def get_active_alerts(nurse_id=None):
+    """Get active (new) alerts, optionally filtered by nurse assignments"""
+    db = get_db()
+    try:
+        if nurse_id:
+            # Only alerts for beds assigned to this nurse
+            alerts = db.execute('''
+                SELECT a.*, b.bed_name, b.room_no
+                FROM alerts a
+                INNER JOIN beds b ON a.bed_id = b.id
+                INNER JOIN nurse_assignments na ON b.id = na.bed_id
+                WHERE a.status = 'new' AND na.nurse_id = ?
+                ORDER BY a.created_at DESC
+            ''', (nurse_id,)).fetchall()
+        else:
+            # All alerts for admin
+            alerts = db.execute('''
+                SELECT a.*, b.bed_name, b.room_no
+                FROM alerts a
+                INNER JOIN beds b ON a.bed_id = b.id
+                WHERE a.status = 'new'
+                ORDER BY a.created_at DESC
+            ''').fetchall()
+        return [dict(a) for a in alerts]
+    finally:
+        db.close()
+
+def get_all_alerts(status=None, nurse_id=None, limit=100):
+    """Get all alerts, optionally filtered by status and nurse"""
+    db = get_db()
+    try:
+        query = '''
+            SELECT a.*, b.bed_name, b.room_no
+            FROM alerts a
+            INNER JOIN beds b ON a.bed_id = b.id
+            WHERE 1=1
+        '''
+        params = []
+        
+        if status:
+            query += ' AND a.status = ?'
+            params.append(status)
+        
+        if nurse_id:
+            query += ' AND EXISTS (SELECT 1 FROM nurse_assignments na WHERE na.bed_id = a.bed_id AND na.nurse_id = ?)'
+            params.append(nurse_id)
+        
+        query += ' ORDER BY a.created_at DESC LIMIT ?'
+        params.append(limit)
+        
+        alerts = db.execute(query, params).fetchall()
+        return [dict(a) for a in alerts]
+    finally:
+        db.close()
+
+def resolve_alert(alert_id):
+    """Mark an alert as resolved"""
+    db = get_db()
+    try:
+        db.execute('''
+            UPDATE alerts 
+            SET status = 'resolved', resolved_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (alert_id,))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+# ==================== DEVICES ====================
+
+def update_device_status(esp_id, ip=None):
+    """Update device last_seen timestamp and IP"""
+    db = get_db()
+    try:
+        # Check if device exists
+        device = db.execute('SELECT * FROM devices WHERE esp_id = ?', (esp_id,)).fetchone()
+        
+        if device:
+            db.execute('''
+                UPDATE devices 
+                SET last_seen = CURRENT_TIMESTAMP, ip = ?, status = 'online'
+                WHERE esp_id = ?
+            ''', (ip, esp_id))
+        else:
+            db.execute('''
+                INSERT INTO devices (esp_id, ip, last_seen, status)
+                VALUES (?, ?, CURRENT_TIMESTAMP, 'online')
+            ''', (esp_id, ip))
+        
+        db.commit()
+        
+        # Update offline devices (not seen in last 5 minutes)
+        cutoff = datetime.now() - timedelta(minutes=5)
+        db.execute('''
+            UPDATE devices 
+            SET status = 'offline'
+            WHERE last_seen < ?
+        ''', (cutoff.isoformat(),))
+        db.commit()
+        
+        return True
+    finally:
+        db.close()
+
+def list_devices():
+    """Get all devices"""
+    db = get_db()
+    try:
+        devices = db.execute('SELECT * FROM devices ORDER BY esp_id').fetchall()
+        return [dict(d) for d in devices]
+    finally:
+        db.close()
+
+# ==================== SETTINGS ====================
+
+def get_setting(key, default=None):
+    """Get a setting value by key"""
+    db = get_db()
+    try:
+        setting = db.execute('SELECT value FROM settings WHERE key = ?', (key,)).fetchone()
+        return float(setting['value']) if setting else default
+    finally:
+        db.close()
+
+def set_setting(key, value):
+    """Set a setting value"""
+    db = get_db()
+    try:
+        db.execute('''
+            INSERT INTO settings (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        ''', (key, str(value)))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+def get_all_settings():
+    """Get all settings as a dictionary"""
+    db = get_db()
+    try:
+        settings = db.execute('SELECT key, value FROM settings').fetchall()
+        return {s['key']: float(s['value']) for s in settings}
+    finally:
+        db.close()
+
+# ==================== STATISTICS ====================
+
+def get_stats_overview():
+    """Get overview statistics for dashboard"""
+    db = get_db()
+    try:
+        stats = {}
+        
+        # Total beds
+        stats['total_beds'] = db.execute('SELECT COUNT(*) as count FROM beds').fetchone()['count']
+        
+        # New alerts today
+        today = datetime.now().date().isoformat()
+        stats['new_alerts_today'] = db.execute('''
+            SELECT COUNT(*) as count FROM alerts 
+            WHERE status = 'new' AND DATE(created_at) = ?
+        ''', (today,)).fetchone()['count']
+        
+        # Devices online
+        stats['devices_online'] = db.execute('''
+            SELECT COUNT(*) as count FROM devices WHERE status = 'online'
+        ''').fetchone()['count']
+        
+        # Active nurses
+        stats['active_nurses'] = db.execute('''
+            SELECT COUNT(*) as count FROM users 
+            WHERE role = 'nurse' AND status = 'active'
+        ''').fetchone()['count']
+        
+        return stats
+    finally:
+        db.close()
+

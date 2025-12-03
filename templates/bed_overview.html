@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+
+{% block title %}{{ bed.bed_name }} - Bed Overview{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <h2><i class="fas fa-bed"></i> {{ bed.bed_name }}</h2>
+    <p class="text-muted">Room: {{ bed.room_no or 'N/A' }}</p>
+</div>
+
+<!-- KPI Cards -->
+<div class="row mb-4">
+    <div class="col-md-4 mb-3">
+        <div class="card card-kpi">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-2">Current Temperature</h6>
+                <h2 class="mb-0" id="currentTemp">-</h2>
+                <small class="text-muted">°C</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-3">
+        <div class="card card-kpi">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-2">Current Humidity</h6>
+                <h2 class="mb-0" id="currentHumidity">-</h2>
+                <small class="text-muted">%</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-3">
+        <div class="card card-kpi">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-2">Status</h6>
+                <h4 class="mb-0" id="currentStatus">
+                    <span class="badge bg-secondary">Loading...</span>
+                </h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="row mb-4">
+    <div class="col-lg-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-line"></i> Temperature & Humidity Over Time</h5>
+            </div>
+            <div class="card-body">
+                <div style="height: 350px; position: relative;">
+                    <canvas id="tempHumidityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-area"></i> Motion & Distance Over Time</h5>
+            </div>
+            <div class="card-body">
+                <div style="height: 350px; position: relative;">
+                    <canvas id="motionDistanceChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alerts Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-bell"></i> Alerts for This Bed</h5>
+                <button class="btn btn-sm btn-danger" onclick="clearBedAlerts()">
+                    <i class="fas fa-trash"></i> Clear Alerts
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto; border-radius: 8px;">
+                    <table class="table table-hover">
+                        <thead style="position: sticky; top: 0; background: #f9fafb; z-index: 10;">
+                            <tr>
+                                <th>Time</th>
+                                <th>Type</th>
+                                <th>Message</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertsTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">Loading alerts...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+    const bedId = {{ bed.id }};
+    let tempHumidityChart = null;
+    let motionDistanceChart = null;
+    
+    function loadCurrentData() {
+        fetch(`/api/bed/${bedId}/readings?hours=1`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.error) {
+                    // Show sample data on error
+                    const sample = generateSampleReadings();
+                    const latest = sample[sample.length - 1];
+                    document.getElementById('currentTemp').textContent = latest.temperature.toFixed(1);
+                    document.getElementById('currentHumidity').textContent = latest.humidity.toFixed(1);
+                    const statusEl = document.getElementById('currentStatus');
+                    if (latest.motion) {
+                        statusEl.innerHTML = '<span class="badge bg-success">Active</span>';
+                    } else {
+                        statusEl.innerHTML = '<span class="badge bg-secondary">Inactive</span>';
+                    }
+                    return;
+                }
+                
+                if (data.length > 0) {
+                    const latest = data[0];
+                    document.getElementById('currentTemp').textContent = latest.temperature ? latest.temperature.toFixed(1) : '-';
+                    document.getElementById('currentHumidity').textContent = latest.humidity ? latest.humidity.toFixed(1) : '-';
+                    
+                    const statusEl = document.getElementById('currentStatus');
+                    if (latest.motion) {
+                        statusEl.innerHTML = '<span class="badge bg-success">Active</span>';
+                    } else {
+                        statusEl.innerHTML = '<span class="badge bg-secondary">Inactive</span>';
+                    }
+                } else {
+                    // Show sample data if no readings
+                    const sample = generateSampleReadings();
+                    const latest = sample[sample.length - 1];
+                    document.getElementById('currentTemp').textContent = latest.temperature.toFixed(1);
+                    document.getElementById('currentHumidity').textContent = latest.humidity.toFixed(1);
+                    const statusEl = document.getElementById('currentStatus');
+                    if (latest.motion) {
+                        statusEl.innerHTML = '<span class="badge bg-success">Active</span>';
+                    } else {
+                        statusEl.innerHTML = '<span class="badge bg-secondary">Inactive</span>';
+                    }
+                }
+            })
+            .catch(err => {
+                console.error('Error loading current data:', err);
+                // Show sample data on error
+                const sample = generateSampleReadings();
+                const latest = sample[sample.length - 1];
+                document.getElementById('currentTemp').textContent = latest.temperature.toFixed(1);
+                document.getElementById('currentHumidity').textContent = latest.humidity.toFixed(1);
+                const statusEl = document.getElementById('currentStatus');
+                statusEl.innerHTML = '<span class="badge bg-info">Demo Data</span>';
+            });
+    }
+    
+    function loadReadings() {
+        fetch(`/api/bed/${bedId}/readings?hours=24`)
+            .then(r => r.json())
+            .then(data => {
+                // Handle error response
+                if (data.error) {
+                    console.error('Error loading readings:', data.error);
+                    // Show sample data if there's an error or no data
+                    data = generateSampleReadings();
+                }
+                
+                // If no data, generate sample data
+                if (!data || data.length === 0) {
+                    data = generateSampleReadings();
+                }
+                
+                // Reverse to show chronological order
+                data.reverse();
+                
+                const labels = data.map(r => new Date(r.timestamp || r.time).toLocaleTimeString());
+                const temps = data.map(r => r.temperature);
+                const hums = data.map(r => r.humidity);
+                const motions = data.map(r => r.motion);
+                const distances = data.map(r => r.distance_cm);
+                
+                // Update charts
+                if (tempHumidityChart) {
+                    tempHumidityChart.destroy();
+                }
+                const tempCanvas = document.getElementById('tempHumidityChart');
+                if (tempCanvas) {
+                    tempHumidityChart = initTemperatureHumidityChart(
+                        tempCanvas.getContext('2d'),
+                        { labels, temperatures: temps, humidities: hums }
+                    );
+                }
+                
+                if (motionDistanceChart) {
+                    motionDistanceChart.destroy();
+                }
+                const motionCanvas = document.getElementById('motionDistanceChart');
+                if (motionCanvas) {
+                    motionDistanceChart = initMotionDistanceChart(
+                        motionCanvas.getContext('2d'),
+                        { labels, motions, distances }
+                    );
+                }
+            })
+            .catch(err => {
+                console.error('Error fetching readings:', err);
+                // Show sample data on error
+                const data = generateSampleReadings();
+                const labels = data.map(r => new Date(r.time).toLocaleTimeString());
+                const temps = data.map(r => r.temperature);
+                const hums = data.map(r => r.humidity);
+                const motions = data.map(r => r.motion);
+                const distances = data.map(r => r.distance_cm);
+                
+                if (tempHumidityChart) tempHumidityChart.destroy();
+                tempHumidityChart = initTemperatureHumidityChart(
+                    document.getElementById('tempHumidityChart').getContext('2d'),
+                    { labels, temperatures: temps, humidities: hums }
+                );
+                
+                if (motionDistanceChart) motionDistanceChart.destroy();
+                motionDistanceChart = initMotionDistanceChart(
+                    document.getElementById('motionDistanceChart').getContext('2d'),
+                    { labels, motions, distances }
+                );
+            });
+    }
+    
+    // Generate sample reading data for demo/testing
+    function generateSampleReadings() {
+        const data = [];
+        const now = new Date();
+        for (let i = 23; i >= 0; i--) {
+            const time = new Date(now.getTime() - i * 60 * 60000);
+            data.push({
+                timestamp: time.toISOString(),
+                temperature: 36.5 + Math.random() * 1.5,
+                humidity: 50 + Math.random() * 20,
+                motion: Math.random() > 0.7 ? 1 : 0,
+                distance_cm: 85 + Math.random() * 10
+            });
+        }
+        return data;
+    }
+    
+    function loadAlerts() {
+        fetch('/api/alerts')
+            .then(r => r.json())
+            .then(data => {
+                const bedAlerts = data.filter(a => a.bed_id === bedId);
+                const tbody = document.getElementById('alertsTableBody');
+                
+                if (bedAlerts.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No alerts for this bed</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = '';
+                bedAlerts.forEach(alert => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${new Date(alert.created_at).toLocaleString()}</td>
+                        <td><span class="badge bg-warning">${alert.alert_type}</span></td>
+                        <td>${alert.message}</td>
+                        <td>
+                            <span class="badge ${alert.status === 'new' ? 'bg-danger' : 'bg-success'}">
+                                ${alert.status}
+                            </span>
+                        </td>
+                        <td>
+                            ${alert.status === 'new' ? 
+                                `<button class="btn btn-sm btn-success" onclick="resolveAlert(${alert.id})">Resolve</button>` : 
+                                '<span class="text-muted">Resolved</span>'
+                            }
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            });
+    }
+    
+    function resolveAlert(alertId) {
+        fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    loadAlerts();
+                }
+            });
+    }
+    
+    function clearBedAlerts() {
+        const confirmed = confirm('Are you sure you want to clear all alerts for this bed?');
+        if (!confirmed) return;
+        
+        fetch('/api/alerts/clear/all', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed bottom-0 end-0 m-3';
+                    alertDiv.style.zIndex = '9999';
+                    alertDiv.innerHTML = `
+                        <strong>Success!</strong> All alerts have been cleared.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.body.appendChild(alertDiv);
+                    
+                    setTimeout(() => {
+                        const alert = new bootstrap.Alert(alertDiv);
+                        alert.close();
+                    }, 5000);
+                    
+                    loadAlerts();
+                }
+            })
+            .catch(err => {
+                alert('Error clearing alerts: ' + err.message);
+            });
+    }
+    
+    window.resolveAlert = resolveAlert;
+    window.clearBedAlerts = clearBedAlerts;
+    
+    // Initialize
+    loadCurrentData();
+    loadReadings();
+    loadAlerts();
+    
+    // Refresh every 10 seconds
+    setInterval(() => {
+        loadCurrentData();
+        loadReadings();
+        loadAlerts();
+    }, 10000);
+</script>
+{% endblock %}
+

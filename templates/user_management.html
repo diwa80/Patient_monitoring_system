@@ -1,0 +1,901 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - Patient Monitoring{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <h2><i class="fas fa-users"></i> User Management</h2>
+    <p class="text-muted">Manage system users and nurse assignments</p>
+</div>
+
+<!-- Create User Button + Modal -->
+<div class="row mb-4">
+    <div class="col-12">
+        <button id="openCreateUserBtn" class="btn btn-primary" onclick="openCreateUserModal()">
+            <i class="fas fa-user-plus"></i> Create New User
+        </button>
+
+        <!-- Modal -->
+        <div class="modal fade" id="createUserModal" tabindex="-1" aria-labelledby="createUserModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content user-modal">
+                    <div class="modal-header bg-gradient-primary">
+                        <div class="d-flex align-items-center">
+                            <div class="modal-icon-wrapper me-3">
+                                <i class="fas fa-user-plus"></i>
+                            </div>
+                            <div>
+                                <h5 class="modal-title mb-0" id="createUserModalLabel">Create New User</h5>
+                                <small class="text-white-50">Add a new user to the system</small>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <form id="createUserModalForm">
+                            <div class="form-section">
+                                <h6 class="section-title"><i class="fas fa-user-circle"></i> Account Information</h6>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="username" class="form-label"><i class="fas fa-user text-primary"></i> Username</label>
+                                        <input type="text" class="form-control form-control-modern" id="username" name="username" placeholder="Enter username" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="password" class="form-label"><i class="fas fa-lock text-primary"></i> Password</label>
+                                        <div class="input-group">
+                                            <input type="password" class="form-control form-control-modern" id="password" name="password" placeholder="Enter secure password" required>
+                                            <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('password')">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted">Min. 6 characters</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <h6 class="section-title"><i class="fas fa-user-tag"></i> Role & Assignments</h6>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="role" class="form-label"><i class="fas fa-id-badge text-primary"></i> Role</label>
+                                        <select class="form-select form-control-modern" id="role" name="role" required>
+                                            <option value="nurse" selected>👨‍⚕️ Nurse</option>
+                                            <option value="admin">👑 Administrator</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="beds" class="form-label"><i class="fas fa-bed text-primary"></i> Assign Beds</label>
+                                        <select id="beds" name="beds[]" class="form-select form-control-modern" multiple size="3">
+                                            <!-- beds will be loaded dynamically -->
+                                        </select>
+                                        <small class="text-muted">Hold Ctrl/Cmd for multiple</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-section">
+                                <h6 class="section-title"><i class="fas fa-key"></i> Access Permissions</h6>
+                                <div class="permissions-grid">
+                                    <div class="permission-item">
+                                        <input class="form-check-input" type="checkbox" id="perm_dashboard" name="menu_permissions[]" value="dashboard">
+                                        <label class="form-check-label" for="perm_dashboard">
+                                            <i class="fas fa-chart-line text-info"></i>
+                                            <span>Dashboard</span>
+                                        </label>
+                                    </div>
+                                    <div class="permission-item">
+                                        <input class="form-check-input" type="checkbox" id="perm_devices" name="menu_permissions[]" value="devices">
+                                        <label class="form-check-label" for="perm_devices">
+                                            <i class="fas fa-microchip text-success"></i>
+                                            <span>Devices</span>
+                                        </label>
+                                    </div>
+                                    <div class="permission-item">
+                                        <input class="form-check-input" type="checkbox" id="perm_alerts" name="menu_permissions[]" value="alerts">
+                                        <label class="form-check-label" for="perm_alerts">
+                                            <i class="fas fa-bell text-warning"></i>
+                                            <span>Alerts</span>
+                                        </label>
+                                    </div>
+                                    <div class="permission-item">
+                                        <input class="form-check-input" type="checkbox" id="perm_settings" name="menu_permissions[]" value="settings">
+                                        <label class="form-check-label" for="perm_settings">
+                                            <i class="fas fa-cog text-secondary"></i>
+                                            <span>Settings</span>
+                                        </label>
+                                    </div>
+                                    <div class="permission-item">
+                                        <input class="form-check-input" type="checkbox" id="perm_users" name="menu_permissions[]" value="users">
+                                        <label class="form-check-label" for="perm_users">
+                                            <i class="fas fa-users text-danger"></i>
+                                            <span>Users</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="modal-footer border-0 pt-4">
+                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                                    <i class="fas fa-times"></i> Cancel
+                                </button>
+                                <button type="submit" class="btn btn-primary btn-gradient">
+                                    <i class="fas fa-plus-circle"></i> Create User
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content user-modal">
+            <div class="modal-header bg-gradient-warning">
+                <div class="d-flex align-items-center">
+                    <div class="modal-icon-wrapper me-3">
+                        <i class="fas fa-user-edit"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title mb-0" id="editUserModalLabel">Edit User</h5>
+                        <small class="text-white-50">Update user information and permissions</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="editUserModalForm">
+                    <input type="hidden" id="edit_user_id" name="user_id">
+                    
+                    <div class="form-section">
+                        <h6 class="section-title"><i class="fas fa-user-circle"></i> Account Information</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="edit_username" class="form-label"><i class="fas fa-user text-warning"></i> Username</label>
+                                <input type="text" class="form-control form-control-modern" id="edit_username" name="username" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="edit_role" class="form-label"><i class="fas fa-id-badge text-warning"></i> Role</label>
+                                <select class="form-select form-control-modern" id="edit_role" name="role" required>
+                                    <option value="nurse">👨‍⚕️ Nurse</option>
+                                    <option value="admin">👑 Administrator</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h6 class="section-title"><i class="fas fa-bed"></i> Bed Assignments</h6>
+                        <label for="edit_beds" class="form-label"><i class="fas fa-hospital-user text-warning"></i> Assigned Beds</label>
+                        <select class="form-select form-control-modern" id="edit_beds" name="beds[]" multiple size="4">
+                            <option value="">-- Loading beds --</option>
+                        </select>
+                        <small class="text-muted"><i class="fas fa-info-circle"></i> Hold Ctrl/Cmd to select multiple beds</small>
+                    </div>
+
+                    <div class="form-section">
+                        <h6 class="section-title"><i class="fas fa-key"></i> Access Permissions</h6>
+                        <div class="permissions-grid" id="editMenuPermissions">
+                            <div class="permission-item">
+                                <input class="form-check-input" type="checkbox" id="edit_perm_dashboard" name="menu_permissions[]" value="dashboard">
+                                <label class="form-check-label" for="edit_perm_dashboard">
+                                    <i class="fas fa-chart-line text-info"></i>
+                                    <span>Dashboard</span>
+                                </label>
+                            </div>
+                            <div class="permission-item">
+                                <input class="form-check-input" type="checkbox" id="edit_perm_devices" name="menu_permissions[]" value="devices">
+                                <label class="form-check-label" for="edit_perm_devices">
+                                    <i class="fas fa-microchip text-success"></i>
+                                    <span>Devices</span>
+                                </label>
+                            </div>
+                            <div class="permission-item">
+                                <input class="form-check-input" type="checkbox" id="edit_perm_alerts" name="menu_permissions[]" value="alerts">
+                                <label class="form-check-label" for="edit_perm_alerts">
+                                    <i class="fas fa-bell text-warning"></i>
+                                    <span>Alerts</span>
+                                </label>
+                            </div>
+                            <div class="permission-item">
+                                <input class="form-check-input" type="checkbox" id="edit_perm_settings" name="menu_permissions[]" value="settings">
+                                <label class="form-check-label" for="edit_perm_settings">
+                                    <i class="fas fa-cog text-secondary"></i>
+                                    <span>Settings</span>
+                                </label>
+                            </div>
+                            <div class="permission-item">
+                                <input class="form-check-input" type="checkbox" id="edit_perm_users" name="menu_permissions[]" value="users">
+                                <label class="form-check-label" for="edit_perm_users">
+                                    <i class="fas fa-users text-danger"></i>
+                                    <span>Users</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer border-0 pt-4">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                        <button type="submit" class="btn btn-warning btn-gradient">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Change Password Modal -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content user-modal">
+            <div class="modal-header bg-gradient-info">
+                <div class="d-flex align-items-center">
+                    <div class="modal-icon-wrapper me-3">
+                        <i class="fas fa-key"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title mb-0">Change Password</h5>
+                        <small class="text-white-50">Update user password securely</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="changePasswordForm">
+                    <input type="hidden" id="pwd_user_id" name="user_id">
+                    
+                    <div class="form-section">
+                        <div class="alert alert-info border-0 mb-4" role="alert">
+                            <i class="fas fa-info-circle"></i> You are changing the password for this account
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label for="pwd_username" class="form-label"><i class="fas fa-user text-info"></i> Username</label>
+                            <input type="text" class="form-control form-control-modern" id="pwd_username" disabled>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="pwd_new_password" class="form-label"><i class="fas fa-lock text-info"></i> New Password</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control form-control-modern" id="pwd_new_password" name="new_password" placeholder="Enter new password" required>
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('pwd_new_password')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="pwd_confirm_password" class="form-label"><i class="fas fa-shield-alt text-info"></i> Confirm Password</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control form-control-modern" id="pwd_confirm_password" name="confirm_password" placeholder="Re-enter password" required>
+                                <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('pwd_confirm_password')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="password-requirements">
+                            <small class="text-muted">
+                                <i class="fas fa-check-circle text-success"></i> Minimum 6 characters<br>
+                                <i class="fas fa-check-circle text-success"></i> Both passwords must match
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer border-0 pt-4">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                        <button type="submit" class="btn btn-info btn-gradient">
+                            <i class="fas fa-unlock-alt"></i> Update Password
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Users Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-list"></i> All Users</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">Loading users...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function loadUsers() {
+        fetch('/api/users')
+            .then(r => r.json())
+            .then(data => {
+                const tbody = document.getElementById('usersTableBody');
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No users found</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                data.forEach(user => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><strong>${user.username}</strong></td>
+                        <td><span class="badge bg-${user.role === 'admin' ? 'danger' : 'primary'}">${user.role}</span></td>
+                        <td>
+                            <span class="badge bg-${user.status === 'active' ? 'success' : 'secondary'}">
+                                ${user.status}
+                            </span>
+                        </td>
+                        <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <button class="btn btn-sm btn-secondary me-1" onclick="openEditUserModal(${user.id})">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                            <button class="btn btn-sm btn-info me-1" onclick="openChangePasswordModal(${user.id}, '${user.username}')">
+                                <i class="fas fa-key"></i> Password
+                            </button>
+                            <button class="btn btn-sm btn-danger me-1" onclick="deleteUser(${user.id})">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                            <button class="btn btn-sm btn-warning me-1" onclick="toggleUser(${user.id}, '${user.status}')">
+                                ${user.status === 'active' ? '<i class="fas fa-ban"></i> Disable' : '<i class="fas fa-check"></i> Enable'}
+                            </button>
+                            
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            });
+    }
+
+    function toggleUser(userId, currentStatus) {
+        fetch(`/users/${userId}/toggle`, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    loadUsers();
+                }
+            });
+    }
+
+    function assignBeds(nurseId) {
+        // Fallback quick assign, keeps original behavior
+        const bedId = prompt('Enter bed ID to assign:');
+        if (bedId) {
+            const formData = new FormData();
+            formData.append('nurse_id', nurseId);
+            formData.append('bed_id', bedId);
+            formData.append('action', 'assign');
+
+            fetch('/assignments', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        alert('Bed assigned successfully');
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                });
+        }
+    }
+
+    window.toggleUser = toggleUser;
+    window.assignBeds = assignBeds;
+
+    // Open edit modal and populate fields
+    function openEditUserModal(userId) {
+        // Load both users and beds
+        Promise.all([
+            fetch('/api/users').then(r => r.json()),
+            fetch('/api/beds').then(r => r.json())
+        ])
+        .then(([users, beds]) => {
+            const user = users.find(u => u.id === userId);
+            if (!user) {
+                alert('User not found');
+                return;
+            }
+
+            document.getElementById('edit_user_id').value = user.id;
+            document.getElementById('edit_username').value = user.username || '';
+            document.getElementById('edit_role').value = user.role || 'nurse';
+
+            // Populate beds dropdown
+            const bedsSelect = document.getElementById('edit_beds');
+            bedsSelect.innerHTML = '<option value="">-- Select Beds --</option>';
+            beds.forEach(bed => {
+                const option = document.createElement('option');
+                option.value = bed.id;
+                option.textContent = `${bed.bed_name} (${bed.room_no || 'N/A'})`;
+                bedsSelect.appendChild(option);
+            });
+
+            // Set currently assigned beds
+            if (user.beds && Array.isArray(user.beds)) {
+                user.beds.forEach(bed => {
+                    const option = bedsSelect.querySelector(`option[value="${bed.id}"]`);
+                    if (option) option.selected = true;
+                });
+            }
+
+            // clear checkboxes
+            document.querySelectorAll('#editMenuPermissions input[type="checkbox"]').forEach(cb => cb.checked = false);
+
+            // user.menu_permissions may be JSON string or array
+            let perms = [];
+            if (user.menu_permissions) {
+                try {
+                    perms = JSON.parse(user.menu_permissions);
+                } catch (e) {
+                    // if already an array
+                    if (Array.isArray(user.menu_permissions)) perms = user.menu_permissions;
+                }
+            }
+
+            if (Array.isArray(perms)) {
+                perms.forEach(p => {
+                    const cb = document.querySelector(`#editMenuPermissions input[value="${p}"]`);
+                    if (cb) cb.checked = true;
+                });
+            }
+
+            const modalEl = document.getElementById('editUserModal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        })
+        .catch(() => alert('Failed to load user data'));
+    }
+
+    // Delete user
+    function deleteUser(userId) {
+        if (!confirm('Delete user? This action cannot be undone.')) return;
+        fetch(`/users/${userId}/delete`, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    alert('User deleted');
+                    loadUsers();
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown'));
+                }
+            })
+            .catch(() => alert('Network error'));
+    }
+
+    // Modal control
+    function openCreateUserModal() {
+        // Load beds list before opening
+        loadBeds();
+        const modalEl = document.getElementById('createUserModal');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    function loadBeds() {
+        // Fetch list of beds from server; expects /api/beds returning array [{id, label}]
+        fetch('/api/beds')
+            .then(r => r.json())
+            .then(beds => {
+                const bedsSelect = document.getElementById('beds');
+                if (!bedsSelect) return;
+                bedsSelect.innerHTML = '';
+                beds.forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = b.id;
+                    opt.textContent = b.label || (`Bed ${b.id}`);
+                    bedsSelect.appendChild(opt);
+                });
+            })
+            .catch(() => {
+                // ignore, leave empty select
+            });
+    }
+
+    // Create user modal form submission
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('createUserModalForm');
+        if (!form) return;
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const fd = new FormData();
+            fd.append('username', document.getElementById('username').value);
+            fd.append('password', document.getElementById('password').value);
+            fd.append('role', document.getElementById('role').value);
+
+            // append selected beds
+            const bedsSelect = document.getElementById('beds');
+            if (bedsSelect) {
+                Array.from(bedsSelect.selectedOptions).forEach(opt => fd.append('beds[]', opt.value));
+            }
+
+            // append menu permissions
+            const perms = document.querySelectorAll('#menuPermissions input[type="checkbox"]:checked');
+            perms.forEach(chk => fd.append('menu_permissions[]', chk.value));
+
+            fetch('/users/create', { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        // close modal
+                        const modalEl = document.getElementById('createUserModal');
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
+                        form.reset();
+                        loadUsers();
+                        alert('User created successfully');
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown'));
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert('Network error');
+                });
+        });
+    });
+
+    // Edit user modal form submission
+    document.addEventListener('DOMContentLoaded', function() {
+        const editForm = document.getElementById('editUserModalForm');
+        if (!editForm) return;
+
+        editForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const userId = document.getElementById('edit_user_id').value;
+            if (!userId) return alert('Missing user id');
+
+            const fd = new FormData();
+            fd.append('username', document.getElementById('edit_username').value);
+            fd.append('role', document.getElementById('edit_role').value);
+
+            const perms = document.querySelectorAll('#editMenuPermissions input[type="checkbox"]:checked');
+            perms.forEach(chk => fd.append('menu_permissions[]', chk.value));
+
+            // Add selected beds
+            const selectedBeds = document.getElementById('edit_beds').selectedOptions;
+            for (let bed of selectedBeds) {
+                fd.append('beds[]', bed.value);
+            }
+
+            fetch(`/users/${userId}/update`, { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        const modalEl = document.getElementById('editUserModal');
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
+                        loadUsers();
+                        alert('User updated successfully');
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown'));
+                    }
+                })
+                .catch(() => alert('Network error'));
+        });
+    });
+
+    // Change Password Modal
+    function openChangePasswordModal(userId, username) {
+        document.getElementById('pwd_user_id').value = userId;
+        document.getElementById('pwd_username').value = username;
+        document.getElementById('pwd_new_password').value = '';
+        document.getElementById('pwd_confirm_password').value = '';
+        
+        const modalEl = document.getElementById('changePasswordModal');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    // Password visibility toggle
+    function togglePasswordVisibility(inputId) {
+        const input = document.getElementById(inputId);
+        const icon = event.currentTarget.querySelector('i');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    }
+
+    // Expose functions globally
+    window.openCreateUserModal = openCreateUserModal;
+    window.openEditUserModal = openEditUserModal;
+    window.openChangePasswordModal = openChangePasswordModal;
+    window.togglePasswordVisibility = togglePasswordVisibility;
+    window.deleteUser = deleteUser;
+    window.toggleUser = toggleUser;
+    window.assignBeds = assignBeds;
+
+    // initial load
+    document.addEventListener('DOMContentLoaded', loadUsers);
+</script>
+
+<style>
+/* Enhanced Modal Styles */
+.user-modal {
+    border: none;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.user-modal .modal-header {
+    border: none;
+    padding: 1.75rem 2rem;
+    color: white;
+}
+
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #0284c7 0%, #06b6d4 100%);
+}
+
+.bg-gradient-warning {
+    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+}
+
+.bg-gradient-info {
+    background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+}
+
+.modal-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    backdrop-filter: blur(10px);
+}
+
+.form-section {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 2px solid #f1f5f9;
+}
+
+.form-section:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.section-title {
+    color: var(--text-primary);
+    font-weight: 700;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: var(--font-size-md);
+}
+
+.section-title i {
+    color: var(--color-primary);
+    font-size: var(--font-size-lg);
+}
+
+.form-control-modern {
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.65rem 1rem;
+    transition: all 0.3s ease;
+    font-size: var(--font-size-base);
+}
+
+.form-control-modern:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.1);
+    transform: translateY(-1px);
+}
+
+.form-label {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: var(--font-size-base);
+}
+
+.form-label i {
+    font-size: var(--font-size-md);
+}
+
+.permissions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.permission-item {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.permission-item:hover {
+    border-color: var(--color-primary);
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
+    transform: translateY(-2px);
+}
+
+.permission-item input[type="checkbox"] {
+    display: none;
+}
+
+.permission-item input[type="checkbox"]:checked + label {
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.permission-item input[type="checkbox"]:checked ~ label i {
+    transform: scale(1.2);
+}
+
+.permission-item label {
+    cursor: pointer;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: var(--font-size-base);
+    transition: all 0.3s ease;
+}
+
+.permission-item label i {
+    font-size: 1.25rem;
+    transition: all 0.3s ease;
+}
+
+.btn-gradient {
+    background: linear-gradient(135deg, var(--color-primary) 0%, #06b6d4 100%);
+    border: none;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+    transition: all 0.3s ease;
+}
+
+.btn-gradient:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(2, 132, 199, 0.4);
+}
+
+.btn-warning.btn-gradient {
+    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.btn-warning.btn-gradient:hover {
+    box-shadow: 0 8px 20px rgba(245, 158, 11, 0.4);
+}
+
+.btn-info.btn-gradient {
+    background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+}
+
+.btn-info.btn-gradient:hover {
+    box-shadow: 0 8px 20px rgba(14, 165, 233, 0.4);
+}
+
+.password-requirements {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    border-left: 4px solid var(--color-info);
+}
+
+.input-group .btn {
+    border: 2px solid #e2e8f0;
+    border-left: none;
+    border-radius: 0 10px 10px 0;
+}
+
+.input-group .form-control-modern {
+    border-right: none;
+    border-radius: 10px 0 0 10px;
+}
+
+.text-white-50 {
+    opacity: 0.85;
+}
+
+    @media (max-width: 768px) {
+    .permissions-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .modal-icon-wrapper {
+        width: 40px;
+        height: 40px;
+        font-size: 1.25rem;
+    }
+    
+    .user-modal .modal-header {
+        padding: 1.25rem 1.5rem;
+    }
+}
+</style>
+
+<script>
+    // Change Password Form Submission
+    const changePasswordForm = document.getElementById('changePasswordForm');
+    if (changePasswordForm) {
+        changePasswordForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const userId = document.getElementById('pwd_user_id').value;
+            const newPassword = document.getElementById('pwd_new_password').value;
+            const confirmPassword = document.getElementById('pwd_confirm_password').value;
+
+            if (!newPassword) return alert('Please enter a new password');
+            if (newPassword.length < 6) return alert('Password must be at least 6 characters');
+            if (newPassword !== confirmPassword) return alert('Passwords do not match');
+
+            const fd = new FormData();
+            fd.append('new_password', newPassword);
+
+            fetch(`/users/${userId}/change-password`, { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        const modalEl = document.getElementById('changePasswordModal');
+                        const modal = bootstrap.Modal.getInstance(modalEl);
+                        if (modal) modal.hide();
+                        alert('Password changed successfully');
+                        loadUsers();
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown'));
+                    }
+                })
+                .catch(() => alert('Network error'));
+        });
+    }
+
+    // initial load
+    document.addEventListener('DOMContentLoaded', loadUsers);
+</script>
+{% endblock %}

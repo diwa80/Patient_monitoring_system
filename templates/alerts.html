@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}Alerts - Patient Monitoring{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4 d-flex justify-content-between align-items-center">
+    <div>
+        <h2><i class="fas fa-bell"></i> Alerts</h2>
+        <p class="text-muted">Monitor and manage patient alerts</p>
+    </div>
+    <button class="btn btn-danger" onclick="clearAllAlerts()">
+        <i class="fas fa-trash"></i> Clear All Alerts
+    </button>
+</div>
+
+<!-- Filter Tabs -->
+<ul class="nav nav-tabs mb-4" id="alertTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button">
+            All Alerts
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="new-tab" data-bs-toggle="tab" data-bs-target="#new" type="button">
+            New <span class="badge bg-danger" id="newCount">0</span>
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="resolved-tab" data-bs-toggle="tab" data-bs-target="#resolved" type="button">
+            Resolved
+        </button>
+    </li>
+</ul>
+
+<!-- Tab Content -->
+<div class="tab-content" id="alertTabContent">
+    <div class="tab-pane fade show active" id="all" role="tabpanel">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto; border-radius: 8px;">
+                    <table class="table table-hover">
+                        <thead style="position: sticky; top: 0; background: #f9fafb; z-index: 10;">
+                            <tr>
+                                <th>Time</th>
+                                <th>Bed</th>
+                                <th>Type</th>
+                                <th>Message</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertsTableAll">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading alerts...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tab-pane fade" id="new" role="tabpanel">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto; border-radius: 8px;">
+                    <table class="table table-hover">
+                        <thead style="position: sticky; top: 0; background: #f9fafb; z-index: 10;">
+                            <tr>
+                                <th>Time</th>
+                                <th>Bed</th>
+                                <th>Type</th>
+                                <th>Message</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertsTableNew">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">Loading alerts...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tab-pane fade" id="resolved" role="tabpanel">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto; border-radius: 8px;">
+                    <table class="table table-hover">
+                        <thead style="position: sticky; top: 0; background: #f9fafb; z-index: 10;">
+                            <tr>
+                                <th>Time</th>
+                                <th>Bed</th>
+                                <th>Type</th>
+                                <th>Message</th>
+                                <th>Resolved At</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alertsTableResolved">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">Loading alerts...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function loadAlerts(status = null) {
+        const url = status ? `/api/alerts?status=${status}` : '/api/alerts';
+        
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                const tableId = status === 'new' ? 'alertsTableNew' : 
+                               status === 'resolved' ? 'alertsTableResolved' : 
+                               'alertsTableAll';
+                const tbody = document.getElementById(tableId);
+                
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No alerts found</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = '';
+                data.forEach(alert => {
+                    const row = document.createElement('tr');
+                    const actionCell = status === 'resolved' ? 
+                        `<td>${new Date(alert.resolved_at).toLocaleString()}</td>` :
+                        `<td>
+                            <button class="btn btn-sm btn-success" onclick="resolveAlert(${alert.id})">
+                                <i class="fas fa-check"></i> Resolve
+                            </button>
+                        </td>`;
+                    
+                    row.innerHTML = `
+                        <td>${new Date(alert.created_at).toLocaleString()}</td>
+                        <td><strong>${alert.bed_name || 'Bed ' + alert.bed_id}</strong><br><small class="text-muted">${alert.room_no || ''}</small></td>
+                        <td><span class="badge bg-warning">${alert.alert_type}</span></td>
+                        <td>${alert.message}</td>
+                        <td>
+                            <span class="badge ${alert.status === 'new' ? 'bg-danger' : 'bg-success'}">
+                                ${alert.status}
+                            </span>
+                        </td>
+                        ${actionCell}
+                    `;
+                    tbody.appendChild(row);
+                });
+                
+                // Update new count badge
+                if (status === null) {
+                    const newCount = data.filter(a => a.status === 'new').length;
+                    document.getElementById('newCount').textContent = newCount;
+                }
+            });
+    }
+    
+    function resolveAlert(alertId) {
+        fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    loadAlerts();
+                    loadAlerts('new');
+                    loadAlerts('resolved');
+                }
+            });
+    }
+    
+    function clearAllAlerts() {
+        const confirmed = confirm('Are you sure you want to clear all alerts? This action cannot be undone.');
+        if (!confirmed) return;
+        
+        fetch('/api/alerts/clear/all', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    // Show success message
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed bottom-0 end-0 m-3';
+                    alertDiv.style.zIndex = '9999';
+                    alertDiv.innerHTML = `
+                        <strong>Success!</strong> All alerts have been cleared.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.body.appendChild(alertDiv);
+                    
+                    // Auto-dismiss after 5 seconds
+                    setTimeout(() => {
+                        const alert = new bootstrap.Alert(alertDiv);
+                        alert.close();
+                    }, 5000);
+                    
+                    // Reload all alert tables
+                    loadAlerts();
+                    loadAlerts('new');
+                    loadAlerts('resolved');
+                }
+            })
+            .catch(err => {
+                alert('Error clearing alerts: ' + err.message);
+            });
+    }
+    
+    window.resolveAlert = resolveAlert;
+    window.clearAllAlerts = clearAllAlerts;
+    
+    // Load on tab change
+    document.getElementById('all-tab').addEventListener('shown.bs.tab', () => loadAlerts());
+    document.getElementById('new-tab').addEventListener('shown.bs.tab', () => loadAlerts('new'));
+    document.getElementById('resolved-tab').addEventListener('shown.bs.tab', () => loadAlerts('resolved'));
+    
+    // Initial load
+    loadAlerts();
+    loadAlerts('new');
+    loadAlerts('resolved');
+    
+    // Refresh every 10 seconds
+    setInterval(() => {
+        const activeTab = document.querySelector('.nav-link.active').id;
+        if (activeTab === 'all-tab') loadAlerts();
+        else if (activeTab === 'new-tab') loadAlerts('new');
+        else if (activeTab === 'resolved-tab') loadAlerts('resolved');
+    }, 10000);
+</script>
+{% endblock %}
+

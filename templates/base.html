@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Patient Monitoring System{% endblock %}</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="wrapper">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h3><i class="fas fa-heartbeat"></i> Patient Monitor</h3>
+            </div>
+            
+            <ul class="list-unstyled components">
+                <li>
+                    <a href="{{ url_for('dashboard') }}" data-tooltip="Dashboard">
+                        <i class="fas fa-tachometer-alt"></i> <span>Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ url_for('alerts_page') }}" data-tooltip="Alerts">
+                        <i class="fas fa-bell"></i> <span>Alerts</span>
+                    </a>
+                </li>
+                {% set perms = session.get('menu_permissions', []) %}
+                {% if session.role == 'admin' or 'users' in perms %}
+                <li>
+                    <a href="{{ url_for('user_management') }}" data-tooltip="Users">
+                        <i class="fas fa-users"></i> <span>Users</span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if session.role == 'admin' or 'devices' in perms %}
+                <li>
+                    <a href="{{ url_for('device_management') }}" data-tooltip="Devices">
+                        <i class="fas fa-microchip"></i> <span>Devices</span>
+                    </a>
+                </li>
+                {% endif %}
+                {% if session.role == 'admin' or 'settings' in perms %}
+                <li>
+                    <a href="{{ url_for('settings_page') }}" data-tooltip="Settings">
+                        <i class="fas fa-cog"></i> <span>Settings</span>
+                    </a>
+                </li>
+                {% endif %}
+                <li>
+                    <a href="{{ url_for('logout') }}" data-tooltip="Logout">
+                        <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        
+        <!-- Main Content -->
+        <div id="content" class="content">
+            <!-- Top Navbar -->
+            <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+                <div class="container-fluid">
+                    <button type="button" id="sidebarCollapse" class="btn btn-link">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <div class="ms-auto d-flex align-items-center">
+                        <span id="fallAlertIndicator" class="me-3 d-none">
+                            <span class="badge bg-danger animate-pulse">
+                                <i class="fas fa-exclamation-triangle"></i> Fall Alert Active
+                            </span>
+
+                        </span>
+                        <span class="me-3 text-muted">
+                            <i class="fas fa-user-circle"></i> 
+                            {{ session.username }} 
+                            <span class="badge bg-primary ms-2">{{ session.role|title }}</span>
+                        </span>
+                    </div>
+                </div>
+            </nav>
+            
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="container-fluid mt-3">
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            
+            <!-- Page Content -->
+            <div class="container-fluid mt-4">
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Fall Alert Modal -->
+    <div class="modal fade" id="fallAlertModal" tabindex="-1" aria-labelledby="fallAlertModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content fall-alert-modal">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="fallAlertModalLabel">
+                        <i class="fas fa-exclamation-triangle fa-pulse me-2"></i>
+                        <strong>FALL RISK ALERT!</strong>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="alert-icon-container mb-4">
+                        <i class="fas fa-user-injured fa-5x text-danger fa-bounce"></i>
+                    </div>
+                    <h3 class="text-danger mb-3" id="fallAlertBedName">Patient Fall Risk Detected</h3>
+                    <p class="lead mb-3" id="fallAlertMessage">A patient is attempting to get out of bed.</p>
+                    <div class="alert-info-box p-3 bg-light rounded mb-3">
+                        <p class="mb-1"><strong>Bed:</strong> <span id="fallAlertBed">-</span></p>
+                        <p class="mb-1"><strong>Room:</strong> <span id="fallAlertRoom">-</span></p>
+                        <p class="mb-0"><strong>Time:</strong> <span id="fallAlertTime">-</span></p>
+                    </div>
+                    <div class="alert-actions">
+                        <button type="button" class="btn btn-lg btn-primary me-2" onclick="viewBedDetails()">
+                            <i class="fas fa-eye"></i> View Bed Details
+                        </button>
+                        <button type="button" class="btn btn-lg btn-success" onclick="resolveFallAlert()">
+                            <i class="fas fa-check"></i> Mark as Resolved
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    
+    <!-- Auto-dismiss flash alerts after 5 seconds -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const alerts = document.querySelectorAll('.alert-dismissible');
+            if (!alerts || alerts.length === 0) return;
+            console.debug('Auto-dismiss alerts: found', alerts.length);
+
+            alerts.forEach(alert => {
+                // wait 5s then try Bootstrap close, otherwise fade/remove manually
+                setTimeout(() => {
+                    try {
+                        if (window.bootstrap && bootstrap.Alert) {
+                            const bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
+                            bsAlert.close();
+                            console.debug('Closed alert via Bootstrap API');
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('Bootstrap Alert close failed', e);
+                    }
+
+                    // Manual fade out fallback
+                    try {
+                        alert.classList.remove('show');
+                        alert.style.transition = 'opacity 0.35s ease, height 0.35s ease, margin 0.35s ease, padding 0.35s ease';
+                        alert.style.opacity = '0';
+                        // after transition remove from DOM
+                        setTimeout(() => {
+                            if (alert && alert.parentNode) alert.parentNode.removeChild(alert);
+                        }, 400);
+                    } catch (e) {
+                        // final fallback
+                        if (alert && alert.parentNode) alert.parentNode.removeChild(alert);
+                    }
+                }, 5000);
+            });
+        });
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+
+
