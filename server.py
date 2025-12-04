@@ -344,7 +344,41 @@ def api_bed_readings(bed_id):
 def api_stats_overview():
     """Get overview statistics"""
     try:
-        stats = models.get_stats_overview()
+        # If nurse, restrict stats to assigned beds
+        nurse_id = session['user_id'] if session.get('role') == 'nurse' else None
+        stats = models.get_stats_overview(nurse_id=nurse_id)
+
+        # For admin clients, include legacy/admin-oriented keys expected by admin dashboard
+        if session.get('role') == 'admin':
+            db = get_db()
+            try:
+                total_beds = db.execute("SELECT COUNT(*) as cnt FROM beds").fetchone()['cnt']
+            except Exception:
+                total_beds = 0
+
+            try:
+                new_alerts_today = db.execute("SELECT COUNT(*) as cnt FROM alerts WHERE status = 'new' AND date(created_at) = date('now')").fetchone()['cnt']
+            except Exception:
+                new_alerts_today = 0
+
+            try:
+                devices_online = db.execute("SELECT COUNT(*) as cnt FROM devices WHERE status = 'online'").fetchone()['cnt']
+            except Exception:
+                devices_online = 0
+
+            try:
+                active_nurses = db.execute("SELECT COUNT(*) as cnt FROM users WHERE role = 'nurse' AND status = 'active'").fetchone()['cnt']
+            except Exception:
+                active_nurses = 0
+
+            db.close()
+
+            # Map new keys expected by admin dashboard while preserving nurse keys
+            stats['total_beds'] = total_beds
+            stats['new_alerts_today'] = new_alerts_today
+            stats['devices_online'] = devices_online
+            stats['active_nurses'] = active_nurses
+
         return jsonify(stats)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -356,17 +390,37 @@ def api_chart_temperature():
     try:
         db = get_db()
         # Get average temperature per bed for last 24 hours
-        cursor = db.execute('''
-            SELECT 
-                b.id as bed_id, 
-                b.bed_name,
-                ROUND(AVG(r.temperature), 1) as avg_temp
-            FROM readings r
-            JOIN beds b ON r.bed_id = b.id
-            WHERE r.timestamp >= datetime('now', '-24 hours')
-            GROUP BY r.bed_id
-            ORDER BY b.bed_name
-        ''')
+        # If nurse, limit to beds assigned to the nurse
+        if session.get('role') == 'nurse':
+            nurse_beds = [b['id'] for b in models.get_nurse_beds(session['user_id'])]
+            if not nurse_beds:
+                db.close()
+                return jsonify({'labels': [], 'temperatures': []})
+            placeholders = ','.join(['?'] * len(nurse_beds))
+            query = f'''
+                SELECT 
+                    b.id as bed_id, 
+                    b.bed_name,
+                    ROUND(AVG(r.temperature), 1) as avg_temp
+                FROM readings r
+                JOIN beds b ON r.bed_id = b.id
+                WHERE r.timestamp >= datetime('now', '-24 hours') AND r.bed_id IN ({placeholders})
+                GROUP BY r.bed_id
+                ORDER BY b.bed_name
+            '''
+            cursor = db.execute(query, tuple(nurse_beds))
+        else:
+            cursor = db.execute('''
+                SELECT 
+                    b.id as bed_id, 
+                    b.bed_name,
+                    ROUND(AVG(r.temperature), 1) as avg_temp
+                FROM readings r
+                JOIN beds b ON r.bed_id = b.id
+                WHERE r.timestamp >= datetime('now', '-24 hours')
+                GROUP BY r.bed_id
+                ORDER BY b.bed_name
+            ''')
         rows = cursor.fetchall()
         db.close()
         

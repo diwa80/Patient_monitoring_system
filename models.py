@@ -424,33 +424,77 @@ def get_all_settings():
 
 # ==================== STATISTICS ====================
 
-def get_stats_overview():
-    """Get overview statistics for dashboard"""
+def get_stats_overview(nurse_id=None):
+    """Get overview statistics for dashboard.
+
+    If `nurse_id` is provided, statistics are restricted to beds assigned to that nurse.
+    """
     db = get_db()
     try:
         stats = {}
-        
-        # Total beds
-        stats['total_beds'] = db.execute('SELECT COUNT(*) as count FROM beds').fetchone()['count']
-        
-        # New alerts today
-        today = datetime.now().date().isoformat()
-        stats['new_alerts_today'] = db.execute('''
-            SELECT COUNT(*) as count FROM alerts 
-            WHERE status = 'new' AND DATE(created_at) = ?
-        ''', (today,)).fetchone()['count']
-        
-        # Devices online
-        stats['devices_online'] = db.execute('''
-            SELECT COUNT(*) as count FROM devices WHERE status = 'online'
-        ''').fetchone()['count']
-        
-        # Active nurses
-        stats['active_nurses'] = db.execute('''
-            SELECT COUNT(*) as count FROM users 
-            WHERE role = 'nurse' AND status = 'active'
-        ''').fetchone()['count']
-        
+
+        # Monitored beds (total beds or beds assigned to nurse)
+        if nurse_id:
+            stats['monitored_beds'] = db.execute(
+                'SELECT COUNT(*) as count FROM nurse_assignments WHERE nurse_id = ?', (nurse_id,)
+            ).fetchone()['count']
+        else:
+            stats['monitored_beds'] = db.execute('SELECT COUNT(*) as count FROM beds').fetchone()['count']
+
+        # Active movements: count distinct beds with motion detected in the last 5 minutes
+        try:
+            if nurse_id:
+                active_movements = db.execute("""
+                    SELECT COUNT(DISTINCT r.bed_id) as cnt FROM readings r
+                    WHERE r.motion = 1 AND r.timestamp >= datetime('now', '-5 minutes')
+                    AND EXISTS (SELECT 1 FROM nurse_assignments na WHERE na.bed_id = r.bed_id AND na.nurse_id = ?)
+                """, (nurse_id,)).fetchone()['cnt']
+            else:
+                active_movements = db.execute("""
+                    SELECT COUNT(DISTINCT bed_id) as cnt FROM readings
+                    WHERE motion = 1 AND timestamp >= datetime('now', '-5 minutes')
+                """).fetchone()['cnt']
+        except Exception:
+            active_movements = 0
+        stats['active_movements'] = active_movements or 0
+
+        # Fall risk: count of new alerts of types indicating fall/exit in the last 24 hours
+        try:
+            if nurse_id:
+                fall_risk = db.execute("""
+                    SELECT COUNT(*) as cnt FROM alerts a
+                    WHERE a.status = 'new' AND (a.alert_type LIKE '%fall%' OR a.alert_type LIKE '%exit%')
+                    AND a.created_at >= datetime('now', '-24 hours')
+                    AND EXISTS (SELECT 1 FROM nurse_assignments na WHERE na.bed_id = a.bed_id AND na.nurse_id = ?)
+                """, (nurse_id,)).fetchone()['cnt']
+            else:
+                fall_risk = db.execute("""
+                    SELECT COUNT(*) as cnt FROM alerts
+                    WHERE status = 'new' AND (alert_type LIKE '%fall%' OR alert_type LIKE '%exit%')
+                    AND created_at >= datetime('now', '-24 hours')
+                """).fetchone()['cnt']
+        except Exception:
+            fall_risk = 0
+        stats['fall_risk'] = fall_risk or 0
+
+        # Average room temperature: average of readings in last 24 hours (optionally limited to nurse beds)
+        try:
+            if nurse_id:
+                avg_temp = db.execute("""
+                    SELECT ROUND(AVG(r.temperature), 1) as avg_temp FROM readings r
+                    WHERE r.temperature IS NOT NULL AND r.timestamp >= datetime('now', '-24 hours')
+                    AND EXISTS (SELECT 1 FROM nurse_assignments na WHERE na.bed_id = r.bed_id AND na.nurse_id = ?)
+                """, (nurse_id,)).fetchone()['avg_temp']
+            else:
+                avg_temp = db.execute("""
+                    SELECT ROUND(AVG(temperature), 1) as avg_temp FROM readings
+                    WHERE temperature IS NOT NULL AND timestamp >= datetime('now', '-24 hours')
+                """).fetchone()['avg_temp']
+
+            stats['avg_temperature'] = float(avg_temp) if avg_temp is not None else None
+        except Exception:
+            stats['avg_temperature'] = None
+
         return stats
     finally:
         db.close()

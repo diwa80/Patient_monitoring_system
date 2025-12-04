@@ -115,20 +115,34 @@ function formatTime(dateString) {
 
 // Show notification (simple alert for now, can be enhanced with toast library)
 function showNotification(message, type = 'info') {
-    // Create a simple notification element
+    // Ensure a notification container exists (stack notifications)
+    let container = document.getElementById('notificationContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'notificationContainer';
+        container.style.cssText = 'position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:10px; align-items:flex-end;';
+        document.body.appendChild(container);
+    }
+
+    // Create a notification element
     const notification = document.createElement('div');
-    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.className = `alert alert-${type} alert-dismissible fade show`;
+    notification.style.cssText = 'min-width:300px; box-shadow:0 8px 20px rgba(0,0,0,0.08); background: rgba(255,255,255,0.98); border-left: 6px solid #cbd5e1;';
+    // Add a colored left border for the notification based on type
+    if (type === 'success') notification.style.borderLeftColor = 'rgba(16, 185, 129, 0.9)';
+    if (type === 'danger' || type === 'error') notification.style.borderLeftColor = 'rgba(220,38,38,0.95)';
+    if (type === 'warning') notification.style.borderLeftColor = 'rgba(245,158,11,0.95)';
+    if (type === 'info') notification.style.borderLeftColor = 'rgba(2,132,199,0.9)';
     notification.innerHTML = `
         ${message}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
-    
-    document.body.appendChild(notification);
-    
+
+    container.appendChild(notification);
+
     // Auto-remove after 5 seconds
     setTimeout(() => {
-        notification.remove();
+        try { notification.remove(); } catch (e) {}
     }, 5000);
 }
 
@@ -196,6 +210,7 @@ function createAlertTypeBadge(alertType) {
 let lastFallAlertId = null;
 let fallAlertCheckInterval = null;
 let fallAlertModal = null;
+let lastFallAlertTimestamp = 0; // epoch ms of last shown fall alert
 
 function initFallAlertMonitoring() {
     // Get modal instance
@@ -207,9 +222,15 @@ function initFallAlertMonitoring() {
         });
     }
     
+    // Avoid creating multiple intervals if already initialized
+    if (fallAlertCheckInterval) {
+        // already monitoring
+        return;
+    }
+
     // Check for new fall alerts every 3 seconds
     fallAlertCheckInterval = setInterval(checkForFallAlerts, 3000);
-    
+
     // Initial check
     checkForFallAlerts();
 }
@@ -231,10 +252,26 @@ function checkForFallAlerts() {
                 )[0];
                 
                 // Only show if it's a new alert we haven't seen
-                if (latestAlert.id !== lastFallAlertId) {
-                    lastFallAlertId = latestAlert.id;
-                    showFallAlert(latestAlert);
-                }
+                    const now = Date.now();
+                    const isSameAsLast = (latestAlert.id === lastFallAlertId);
+                    const withinCooldown = (now - (lastFallAlertTimestamp || 0)) < 30000; // 30s cooldown
+
+                    // If modal already visible for this alert, don't re-show
+                    const modalElement = document.getElementById('fallAlertModal');
+                    const isModalShown = modalElement && modalElement.classList.contains('show');
+
+                    if (!isSameAsLast) {
+                        // new alert id -> show it
+                        lastFallAlertId = latestAlert.id;
+                        lastFallAlertTimestamp = now;
+                        showFallAlert(latestAlert);
+                    } else if (!isModalShown && !withinCooldown) {
+                        // same alert but modal not shown and cooldown passed -> re-show
+                        lastFallAlertTimestamp = now;
+                        showFallAlert(latestAlert);
+                    } else {
+                        // otherwise ignore repeated notifications
+                    }
             } else {
                 // No active critical alerts - hide indicator if modal is not shown
                 const modalElement = document.getElementById('fallAlertModal');
