@@ -75,7 +75,7 @@
 
                             <div class="form-section">
                                 <h6 class="section-title"><i class="fas fa-key"></i> Access Permissions</h6>
-                                <div class="permissions-grid">
+                                <div class="permissions-grid" id="menuPermissions">
                                     <div class="permission-item">
                                         <input class="form-check-input" type="checkbox" id="perm_dashboard" name="menu_permissions[]" value="dashboard">
                                         <label class="form-check-label" for="perm_dashboard">
@@ -109,6 +109,13 @@
                                         <label class="form-check-label" for="perm_users">
                                             <i class="fas fa-users text-danger"></i>
                                             <span>Users</span>
+                                        </label>
+                                    </div>
+                                    <div class="permission-item">
+                                        <input class="form-check-input" type="checkbox" id="perm_beds" name="menu_permissions[]" value="beds">
+                                        <label class="form-check-label" for="perm_beds">
+                                            <i class="fas fa-procedures text-primary"></i>
+                                            <span>Beds</span>
                                         </label>
                                     </div>
                                 </div>
@@ -212,6 +219,13 @@
                                 <label class="form-check-label" for="edit_perm_users">
                                     <i class="fas fa-users text-danger"></i>
                                     <span>Users</span>
+                                </label>
+                            </div>
+                            <div class="permission-item">
+                                <input class="form-check-input" type="checkbox" id="edit_perm_beds" name="menu_permissions[]" value="beds">
+                                <label class="form-check-label" for="edit_perm_beds">
+                                    <i class="fas fa-procedures text-primary"></i>
+                                    <span>Beds</span>
                                 </label>
                             </div>
                         </div>
@@ -515,7 +529,8 @@
                 beds.forEach(b => {
                     const opt = document.createElement('option');
                     opt.value = b.id;
-                    opt.textContent = b.label || (`Bed ${b.id}`);
+                    // prefer bed_name, fallback to label or id
+                    opt.textContent = b.bed_name || b.label || (`Bed ${b.id}`);
                     bedsSelect.appendChild(opt);
                 });
             })

@@ -185,12 +185,49 @@ def user_management():
     """User management page (permission-based access)"""
     return render_template('user_management.html')
 
-@app.route('/devices')
+
+@app.route('/beds/manage', methods=['GET', 'POST'])
 @login_required
-@permission_required('devices')
-def device_management():
-    """Device management page (permission-based access)"""
-    return render_template('device_management.html')
+@admin_required
+def bed_management():
+    """Admin page to create and list beds"""
+    if request.method == 'POST':
+        bed_name = request.form.get('bed_name')
+        room_no = request.form.get('room_no')
+        if not bed_name:
+            flash('Bed name is required', 'error')
+            return redirect(url_for('bed_management'))
+        try:
+            models.create_bed(bed_name, room_no)
+            flash('Bed created', 'success')
+        except Exception as e:
+            flash('Failed to create bed: ' + str(e), 'error')
+        return redirect(url_for('bed_management'))
+
+    beds = models.list_beds()
+    return render_template('bed_management.html', beds=beds)
+
+
+@app.route('/beds/<int:bed_id>/delete', methods=['POST'])
+@login_required
+@admin_required
+def delete_bed(bed_id):
+    """Delete a bed and related assignments/readings (admin only)"""
+    try:
+        # remove readings for bed
+        db = get_db()
+        db.execute('DELETE FROM readings WHERE bed_id = ?', (bed_id,))
+        db.execute('DELETE FROM nurse_assignments WHERE bed_id = ?', (bed_id,))
+        db.execute('DELETE FROM alerts WHERE bed_id = ?', (bed_id,))
+        db.execute('DELETE FROM beds WHERE id = ?', (bed_id,))
+        db.commit()
+        db.close()
+        flash('Bed and related data deleted', 'success')
+    except Exception as e:
+        flash('Failed to delete bed: ' + str(e), 'error')
+    return redirect(url_for('bed_management'))
+
+# Devices page removed: device management is no longer part of the UI
 
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
@@ -588,6 +625,41 @@ def api_update_user(user_id):
 
         ok = models.update_user(user_id, username, role, menu_permissions=menu_permissions if menu_permissions else None)
         if ok:
+            # Handle bed assignments when role is nurse
+            try:
+                if role == 'nurse':
+                    # parse beds from form
+                    beds = request.form.getlist('beds[]') or request.form.getlist('beds') or []
+                    desired = []
+                    for b in beds:
+                        try:
+                            desired.append(int(b))
+                        except Exception:
+                            continue
+
+                    current = [b['id'] for b in models.get_nurse_beds(user_id)]
+
+                    # unassign beds not desired
+                    for bid in current:
+                        if bid not in desired:
+                            models.unassign_nurse_from_bed(user_id, bid)
+
+                    # assign new beds
+                    for bid in desired:
+                        if bid not in current:
+                            models.assign_nurse_to_bed(user_id, bid)
+                else:
+                    # If role is not nurse, remove all nurse assignments for safety
+                    models.unassign_nurse_from_bed(user_id, None) if False else None
+                    # The above is a no-op placeholder; perform explicit deletion below
+                    db = get_db()
+                    db.execute('DELETE FROM nurse_assignments WHERE nurse_id = ?', (user_id,))
+                    db.commit()
+                    db.close()
+            except Exception:
+                # non-fatal: continue
+                pass
+
             return jsonify({'status': 'ok'})
         else:
             return jsonify({'error': 'Username already exists or update failed'}), 400
@@ -654,7 +726,16 @@ def api_users():
     """Get all users"""
     try:
         users = models.list_all_users()
-        return jsonify(users)
+        # Attach assigned beds for nurse users to simplify client logic
+        enhanced = []
+        for u in users:
+            if u.get('role') == 'nurse':
+                try:
+                    u['beds'] = models.get_nurse_beds(u['id'])
+                except Exception:
+                    u['beds'] = []
+            enhanced.append(u)
+        return jsonify(enhanced)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -671,16 +752,7 @@ def api_beds():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/devices')
-@login_required
-@admin_required
-def api_devices():
-    """Get all devices"""
-    try:
-        devices = models.list_devices()
-        return jsonify(devices)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+# /api/devices endpoint removed (no UI consumers)
 
 @app.route('/api/settings')
 @login_required

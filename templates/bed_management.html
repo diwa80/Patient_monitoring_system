@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Bed Management - Patient Monitoring{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <h2><i class="fas fa-procedures"></i> Bed Management</h2>
+    <p class="text-muted">Create, view and remove beds (admin only)</p>
+</div>
+
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header"><strong>Add New Bed</strong></div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('bed_management') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Bed Name</label>
+                        <input name="bed_name" class="form-control" required placeholder="Bed 1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Room No</label>
+                        <input name="room_no" class="form-control" placeholder="Room 101">
+                    </div>
+                    <button class="btn btn-primary">Create Bed</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header"><strong>Existing Beds</strong></div>
+            <div class="card-body">
+                {% if beds and beds|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Bed Name</th>
+                                <th>Room No</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for b in beds %}
+                            <tr>
+                                <td>{{ b.id }}</td>
+                                <td>{{ b.bed_name }}</td>
+                                <td>{{ b.room_no or '-' }}</td>
+                                <td class="text-end">
+                                    <form method="post" action="{{ url_for('delete_bed', bed_id=b.id) }}" onsubmit="return confirm('Delete bed {{ b.bed_name }}? This will remove assignments and readings.');" style="display:inline">
+                                        <button class="btn btn-sm btn-outline-danger">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                    <p class="text-muted">No beds found.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
