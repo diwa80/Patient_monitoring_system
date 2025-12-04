@@ -8,110 +8,286 @@
     <p class="text-muted">Your assigned beds and patient status</p>
 </div>
 
-<!-- Assigned Beds -->
-<div class="row" id="bedsContainer">
-    <p class="text-center text-muted">Loading your assigned beds...</p>
+<!-- KPI Row -->
+<div class="row g-3 mb-4" id="kpiRow">
+    <div class="col-sm-6 col-md-3">
+        <div class="card card-kpi p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted">MONITORED BEDS</h6>
+                    <h2 id="kpi_monitored_beds">-</h2>
+                </div>
+                <div class="icon-circle bg-white text-primary"><i class="fas fa-bed"></i></div>
+            </div>
+            <small class="text-white-50 mt-2 d-block">Capacity usage</small>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="card card-kpi p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted">ACTIVE MOVEMENTS</h6>
+                    <h2 id="kpi_active_movements">-</h2>
+                </div>
+                <div class="icon-circle bg-white text-warning"><i class="fas fa-person-walking"></i></div>
+            </div>
+            <small class="text-white-50 mt-2 d-block">Patients currently moving</small>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="card card-kpi p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted">FALL RISK</h6>
+                    <h2 id="kpi_fall_risk">-</h2>
+                </div>
+                <div class="icon-circle bg-white text-danger"><i class="fas fa-person-falling"></i></div>
+            </div>
+            <small class="text-white-50 mt-2 d-block">Beds with possible exit</small>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="card card-kpi p-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted">AVG ROOM TEMP</h6>
+                    <h2 id="kpi_avg_temp">-°C</h2>
+                </div>
+                <div class="icon-circle bg-white text-info"><i class="fas fa-thermometer-half"></i></div>
+            </div>
+            <small class="text-white-50 mt-2 d-block">Comfort range 18–28 °C</small>
+        </div>
+    </div>
 </div>
+
+<!-- Main Dashboard Layout -->
+<div class="row">
+    <div class="col-xl-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-chart-line"></i> Hospital Environment Trend</h5>
+                <small class="text-muted">Last updates</small>
+            </div>
+            <div class="card-body" style="height: 340px;">
+                <canvas id="tempTrendChart" height="160"></canvas>
+            </div>
+        </div>
+
+        
+    </div>
+
+    <div class="col-xl-4">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-bell"></i> Live Alerts</h5>
+                <span class="badge bg-danger" id="alertsCount">0 Active</span>
+            </div>
+            <div class="card-body" id="liveAlertsList" style="max-height:320px; overflow:auto;">
+                <p class="text-muted">Loading alerts...</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-procedures"></i> Live Bed Status</h5>
+                <small class="text-muted">Assigned bed snapshot</small>
+            </div>
+            <div class="card-body" id="bedSnapshotPanel">
+                <p class="text-muted">Loading…</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
+    // Charts
+    let tempChart = null;
+
+    function loadOverview() {
+        fetch('/api/stats/overview')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('kpi_monitored_beds').textContent = data.monitored_beds || 0;
+                document.getElementById('kpi_active_movements').textContent = data.active_movements || 0;
+                document.getElementById('kpi_fall_risk').textContent = data.fall_risk || 0;
+                document.getElementById('kpi_avg_temp').textContent = (data.avg_temperature ? data.avg_temperature.toFixed(1) + '°C' : '-°C');
+            })
+            .catch(() => {
+                console.warn('Failed to load overview stats');
+            });
+    }
+
+    function loadTemperatureChart() {
+        fetch('/api/charts/temperature')
+            .then(r => r.json())
+            .then(json => {
+                const labels = json.labels || [];
+                const data = json.temperatures || [];
+                const canvas = document.getElementById('tempTrendChart');
+                const ctx = canvas.getContext('2d');
+
+                if (!tempChart) {
+                    tempChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Avg Temp (°C)',
+                                data: data,
+                                borderColor: '#0284c7',
+                                backgroundColor: 'rgba(2,132,199,0.08)',
+                                tension: 0.3,
+                                fill: true,
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: false } }
+                        }
+                    });
+                } else {
+                    // Update existing chart data without recreating the chart
+                    tempChart.data.labels = labels;
+                    if (tempChart.data.datasets && tempChart.data.datasets[0]) {
+                        tempChart.data.datasets[0].data = data;
+                    } else {
+                        tempChart.data.datasets = [{ label: 'Avg Temp (°C)', data: data }];
+                    }
+                    tempChart.update();
+                }
+            })
+            .catch(() => console.warn('Failed to load temperature chart'));
+    }
+
+    function loadLiveAlerts() {
+        fetch('/api/alerts?status=new')
+            .then(r => r.json())
+            .then(alerts => {
+                const list = document.getElementById('liveAlertsList');
+                const count = document.getElementById('alertsCount');
+                if (!Array.isArray(alerts) || alerts.length === 0) {
+                    list.innerHTML = '<p class="text-muted">No active alerts</p>';
+                    count.textContent = '0 Active';
+                    return;
+                }
+
+                count.textContent = alerts.length + ' Active';
+                list.innerHTML = '';
+                alerts.forEach(a => {
+                    const el = document.createElement('div');
+                    el.className = 'alert alert-light border mb-2';
+                    el.innerHTML = `<div class="d-flex justify-content-between">
+                        <div>
+                            <strong>${a.alert_type.replace(/_/g,' ')}</strong>
+                            <div class="small text-muted">Bed ${a.bed_id} • ${new Date(a.created_at).toLocaleString()}</div>
+                            <div class="mt-1">${a.message}</div>
+                        </div>
+                        <div class="ms-2">
+                            <button class="btn btn-sm btn-outline-success" onclick="resolveAlert(${a.id})"><i class="fas fa-check"></i></button>
+                        </div>
+                    </div>`;
+                    list.appendChild(el);
+                });
+            })
+            .catch(() => console.warn('Failed to load alerts'));
+    }
+
+    function resolveAlert(alertId) {
+        fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' })
+            .then(r => r.json())
+            .then(res => {
+                if (res.status === 'ok') {
+                    loadLiveAlerts();
+                    loadBeds();
+                } else alert('Failed to resolve alert');
+            });
+    }
+
     function loadBeds() {
         fetch('/api/latest_readings')
             .then(r => r.json())
             .then(data => {
-                const container = document.getElementById('bedsContainer');
-                if (data.length === 0) {
-                    container.innerHTML = '<div class="col-12"><div class="alert alert-info">No beds assigned to you yet.</div></div>';
-                    return;
-                }
-                
-                container.innerHTML = '';
-                data.forEach(bed => {
-                    const card = document.createElement('div');
-                    card.className = 'col-md-6 col-lg-4 mb-4';
-                    
-                    // Check for alerts
-                    const hasAlerts = false; // Would check from alerts API
-                    
-                    // Determine status
-                    const alertType = bed.latest_alert_type || '';
-                    const alertCount = bed.active_alert_count || 0;
-                    let statusClass = '';
-                    let statusIcon = 'fa-check-circle';
-                    let statusText = 'Normal';
-                    let statusColor = 'success';
-                    
-                    if (alertCount > 0) {
-                        if (alertType === 'bed_exit' || alertType === 'possible_fall') {
-                            statusClass = 'border-danger border-start border-4';
-                            statusIcon = 'fa-exclamation-triangle';
-                            statusText = 'Critical';
-                            statusColor = 'danger';
-                        } else if (alertType === 'fever_warning' || alertType === 'high_temperature') {
-                            statusClass = 'border-warning border-start border-4';
-                            statusIcon = 'fa-thermometer-half';
-                            statusText = 'Warning';
-                            statusColor = 'warning';
-                        } else {
-                            statusClass = 'border-warning border-start border-4';
-                            statusIcon = 'fa-exclamation-circle';
-                            statusText = 'Alert';
-                            statusColor = 'warning';
-                        }
-                    }
-                    
-                    card.innerHTML = `
-                        <div class="card h-100 ${statusClass}">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0">${bed.bed_name || 'Bed ' + bed.bed_id}</h5>
-                                <span class="badge bg-${statusColor}">
-                                    <i class="fas ${statusIcon}"></i> ${statusText}
-                                </span>
-                            </div>
-                            <div class="card-body">
-                                <p class="text-muted small mb-3">Room: ${bed.room_no || 'N/A'}</p>
-                                ${alertCount > 0 ? `<div class="alert alert-${statusColor} alert-sm py-1 px-2 mb-3"><small><i class="fas fa-bell"></i> ${alertCount} active alert${alertCount > 1 ? 's' : ''}</small></div>` : ''}
-                                
-                                <div class="row mb-3">
-                                    <div class="col-6">
-                                        <div class="metric-box">
-                                            <small class="text-muted d-block">Temperature</small>
-                                            <h4 class="mb-0">${bed.temperature ? bed.temperature.toFixed(1) + '°C' : 'N/A'}</h4>
-                                        </div>
-                                    </div>
-                                    <div class="col-6">
-                                        <div class="metric-box">
-                                            <small class="text-muted d-block">Humidity</small>
-                                            <h4 class="mb-0">${bed.humidity ? bed.humidity.toFixed(1) + '%' : 'N/A'}</h4>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="row mb-3">
-                                    <div class="col-6">
-                                        <small class="text-muted">Motion:</small>
-                                        <div><span class="badge ${bed.motion ? 'bg-success' : 'bg-secondary'}">${bed.motion ? 'Detected' : 'None'}</span></div>
-                                    </div>
-                                    <div class="col-6">
-                                        <small class="text-muted">Distance:</small>
-                                        <div><strong>${bed.distance_cm ? bed.distance_cm.toFixed(1) + 'cm' : 'N/A'}</strong></div>
-                                    </div>
-                                </div>
-                                
-                                <a href="/beds/${bed.bed_id}" class="btn btn-primary w-100">
-                                    <i class="fas fa-eye"></i> View Details
-                                </a>
-                            </div>
-                        </div>
-                    `;
-                    container.appendChild(card);
-                });
-            });
+                renderBedSnapshot(data || []);
+            })
+            .catch(() => console.warn('Failed to load latest readings'));
     }
     
-    loadBeds();
-    setInterval(loadBeds, 10000);
+    function renderBedSnapshot(beds) {
+        const panel = document.getElementById('bedSnapshotPanel');
+        if (!beds || beds.length === 0) {
+            panel.innerHTML = '<p class="text-muted">No beds assigned</p>';
+            return;
+        }
+
+        // Build a compact bed card for each assigned bed (limit to 3 for space)
+        const maxCards = 3;
+        const items = beds.slice(0, maxCards);
+        let html = '<div class="row g-3">';
+        items.forEach(b => {
+            const statusBadge = (b.active_alert_count && b.active_alert_count > 0)
+                ? '<span class="badge bg-danger">Alert</span>'
+                : '<span class="badge bg-success">Normal</span>';
+
+            const motionText = b.motion ? 'Detected' : 'None';
+            const motionBadge = b.motion ? '<span class="badge bg-success">Detected</span>' : '<span class="badge bg-secondary">None</span>';
+            const distanceText = (b.distance_cm !== undefined && b.distance_cm !== null) ? (b.distance_cm.toFixed(1) + ' cm') : '--';
+
+            html += `
+                <div class="col-12">
+                    <div class="card h-100" style="border-radius:14px; border: 2px solid rgba(0,0,0,0.03);">
+                        <div class="card-body py-4">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div>
+                                    <h6 class="mb-1">${b.bed_name || 'Bed '+b.bed_id}</h6>
+                                    <div class="small text-muted">Room: ${b.room_no || 'N/A'}</div>
+                                </div>
+                                <div>${statusBadge}</div>
+                            </div>
+                            <div class="row text-center mb-3">
+                                <div class="col-4">
+                                    <small class="text-muted">Temp</small>
+                                    <div class="h5 mb-0">${b.temperature ? b.temperature.toFixed(1)+'°C' : '--'}</div>
+                                </div>
+                                <div class="col-4">
+                                    <small class="text-muted">Humidity</small>
+                                    <div class="h5 mb-0">${b.humidity ? b.humidity.toFixed(1)+'%' : '--'}</div>
+                                </div>
+                                <div class="col-4">
+                                    <small class="text-muted">Distance</small>
+                                    <div class="h5 mb-0">${distanceText}</div>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>${motionBadge}</div>
+                                <a href="/beds/${b.bed_id}" class="btn btn-primary btn-sm">View Details</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        panel.innerHTML = html;
+    }
+
+    
+
+    // Initial load and polling
+    function refreshAll() {
+        loadOverview();
+        loadTemperatureChart();
+        loadLiveAlerts();
+        loadBeds();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        refreshAll();
+        setInterval(refreshAll, 5000); // refresh every 5 seconds
+    });
 </script>
 {% endblock %}
 

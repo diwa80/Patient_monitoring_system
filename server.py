@@ -358,12 +358,12 @@ def api_chart_temperature():
         # Get average temperature per bed for last 24 hours
         cursor = db.execute('''
             SELECT 
-                b.bed_id, 
+                b.id as bed_id, 
                 b.bed_name,
                 ROUND(AVG(r.temperature), 1) as avg_temp
             FROM readings r
-            JOIN beds b ON r.bed_id = b.bed_id
-            WHERE r.created_at >= datetime('now', '-24 hours')
+            JOIN beds b ON r.bed_id = b.id
+            WHERE r.timestamp >= datetime('now', '-24 hours')
             GROUP BY r.bed_id
             ORDER BY b.bed_name
         ''')

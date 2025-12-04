@@ -63,6 +63,17 @@
     border-color: var(--color-danger);
 }
 
+.bed-card.alert-status::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    background: linear-gradient(180deg, rgba(220,38,38,1), rgba(239,68,68,0.9));
+    border-radius: 12px 0 0 12px;
+}
+
 .bed-card.alert-status:hover {
     box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
 }
