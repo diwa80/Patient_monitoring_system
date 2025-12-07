@@ -250,12 +250,13 @@ def get_readings_for_bed(bed_id, hours=24, limit=1000):
     db = get_db()
     try:
         cutoff = datetime.now() - timedelta(hours=hours)
+        cutoff_str = cutoff.strftime('%Y-%m-%d %H:%M:%S')  # match DB timestamp format
         readings = db.execute('''
             SELECT * FROM readings
             WHERE bed_id = ? AND timestamp >= ?
             ORDER BY timestamp DESC
             LIMIT ?
-        ''', (bed_id, cutoff.isoformat(), limit)).fetchall()
+        ''', (bed_id, cutoff_str, limit)).fetchall()
         return [dict(r) for r in readings]
     finally:
         db.close()

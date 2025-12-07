@@ -10,33 +10,45 @@
 
 <!-- KPI Cards -->
 <div class="row mb-4">
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
         <div class="card card-kpi">
             <div class="card-body text-center">
                 <h6 class="text-muted mb-2">Current Temperature</h6>
-                <h2 class="mb-0" id="currentTemp">-</h2>
+                <h2 class="mb-0" id="currentTemp">--</h2>
                 <small class="text-muted">°C</small>
             </div>
         </div>
     </div>
     
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
         <div class="card card-kpi">
             <div class="card-body text-center">
                 <h6 class="text-muted mb-2">Current Humidity</h6>
-                <h2 class="mb-0" id="currentHumidity">-</h2>
+                <h2 class="mb-0" id="currentHumidity">--</h2>
                 <small class="text-muted">%</small>
             </div>
         </div>
     </div>
     
-    <div class="col-md-4 mb-3">
+    <div class="col-md-3 mb-3">
         <div class="card card-kpi">
             <div class="card-body text-center">
                 <h6 class="text-muted mb-2">Status</h6>
                 <h4 class="mb-0" id="currentStatus">
-                    <span class="badge bg-secondary">Loading...</span>
+                    <span class="badge bg-secondary">Inactive</span>
                 </h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <div class="card card-kpi">
+            <div class="card-body text-center">
+                <h6 class="text-muted mb-2">Last Updated</h6>
+                <h6 class="mb-0" id="lastUpdated">
+                    <span class="badge bg-secondary">--</span>
+                </h6>
+                <small class="text-muted">ago</small>
             </div>
         </div>
     </div>
@@ -118,86 +130,97 @@
             .then(r => r.json())
             .then(data => {
                 if (data.error) {
-                    // Show sample data on error
-                    const sample = generateSampleReadings();
-                    const latest = sample[sample.length - 1];
-                    document.getElementById('currentTemp').textContent = latest.temperature.toFixed(1);
-                    document.getElementById('currentHumidity').textContent = latest.humidity.toFixed(1);
-                    const statusEl = document.getElementById('currentStatus');
-                    if (latest.motion) {
-                        statusEl.innerHTML = '<span class="badge bg-success">Active</span>';
-                    } else {
-                        statusEl.innerHTML = '<span class="badge bg-secondary">Inactive</span>';
-                    }
+                    console.error('Error loading current data:', data.error);
+                    setCurrentCards(null);
                     return;
                 }
-                
+
                 if (data.length > 0) {
-                    const latest = data[0];
-                    document.getElementById('currentTemp').textContent = latest.temperature ? latest.temperature.toFixed(1) : '-';
-                    document.getElementById('currentHumidity').textContent = latest.humidity ? latest.humidity.toFixed(1) : '-';
-                    
-                    const statusEl = document.getElementById('currentStatus');
-                    if (latest.motion) {
-                        statusEl.innerHTML = '<span class="badge bg-success">Active</span>';
-                    } else {
-                        statusEl.innerHTML = '<span class="badge bg-secondary">Inactive</span>';
-                    }
+                    setCurrentCards(data[0]);
                 } else {
-                    // Show sample data if no readings
-                    const sample = generateSampleReadings();
-                    const latest = sample[sample.length - 1];
-                    document.getElementById('currentTemp').textContent = latest.temperature.toFixed(1);
-                    document.getElementById('currentHumidity').textContent = latest.humidity.toFixed(1);
-                    const statusEl = document.getElementById('currentStatus');
-                    if (latest.motion) {
-                        statusEl.innerHTML = '<span class="badge bg-success">Active</span>';
-                    } else {
-                        statusEl.innerHTML = '<span class="badge bg-secondary">Inactive</span>';
-                    }
+                    console.warn('No data in current readings');
+                    setCurrentCards(null);
                 }
             })
             .catch(err => {
                 console.error('Error loading current data:', err);
-                // Show sample data on error
-                const sample = generateSampleReadings();
-                const latest = sample[sample.length - 1];
-                document.getElementById('currentTemp').textContent = latest.temperature.toFixed(1);
-                document.getElementById('currentHumidity').textContent = latest.humidity.toFixed(1);
-                const statusEl = document.getElementById('currentStatus');
-                statusEl.innerHTML = '<span class="badge bg-info">Demo Data</span>';
+                setCurrentCards(null);
             });
     }
-    
+
+    function setCurrentCards(latest) {
+        const tempEl = document.getElementById('currentTemp');
+        const humEl = document.getElementById('currentHumidity');
+        const statusEl = document.getElementById('currentStatus');
+        const lastUpdatedEl = document.getElementById('lastUpdated');
+
+        if (!latest) {
+            tempEl.textContent = '--';
+            humEl.textContent = '--';
+            statusEl.innerHTML = '<span class="badge bg-secondary">Inactive</span>';
+            lastUpdatedEl.innerHTML = '<span class="badge bg-danger">No data</span>';
+            return;
+        }
+
+        tempEl.textContent = latest.temperature != null ? latest.temperature.toFixed(1) : '--';
+        humEl.textContent = latest.humidity != null ? latest.humidity.toFixed(1) : '--';
+        statusEl.innerHTML = latest.motion ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>';
+
+        if (latest.timestamp) {
+            const readingTime = new Date(latest.timestamp);
+            const now = new Date();
+            const diffMs = now - readingTime;
+            const diffSecs = Math.floor(diffMs / 1000);
+            const diffMins = Math.floor(diffSecs / 60);
+
+            let lastUpdatedText = '--';
+            let badgeClass = 'bg-success';
+
+            if (diffSecs < 60) {
+                lastUpdatedText = `${diffSecs}s`;
+                badgeClass = 'bg-success';
+            } else if (diffMins < 5) {
+                lastUpdatedText = `${diffMins}m`;
+                badgeClass = 'bg-info';
+            } else if (diffMins < 10) {
+                lastUpdatedText = `${diffMins}m`;
+                badgeClass = 'bg-warning';
+            } else {
+                lastUpdatedText = `${diffMins}m`;
+                badgeClass = 'bg-danger';
+            }
+
+            lastUpdatedEl.innerHTML = `<span class="badge ${badgeClass}">${lastUpdatedText}</span>`;
+        } else {
+            lastUpdatedEl.innerHTML = '<span class="badge bg-warning">No TS</span>';
+        }
+    }
+
     function loadReadings() {
         fetch(`/api/bed/${bedId}/readings?hours=24`)
             .then(r => r.json())
             .then(data => {
-                // Handle error response
                 if (data.error) {
                     console.error('Error loading readings:', data.error);
-                    // Show sample data if there's an error or no data
-                    data = generateSampleReadings();
+                    renderEmptyCharts('Error loading readings');
+                    return;
                 }
-                
-                // If no data, generate sample data
+
                 if (!data || data.length === 0) {
-                    data = generateSampleReadings();
+                    console.warn('No readings received');
+                    renderEmptyCharts('No readings');
+                    return;
                 }
-                
-                // Reverse to show chronological order
+
                 data.reverse();
-                
+
                 const labels = data.map(r => new Date(r.timestamp || r.time).toLocaleTimeString());
                 const temps = data.map(r => r.temperature);
                 const hums = data.map(r => r.humidity);
                 const motions = data.map(r => r.motion);
                 const distances = data.map(r => r.distance_cm);
-                
-                // Update charts
-                if (tempHumidityChart) {
-                    tempHumidityChart.destroy();
-                }
+
+                if (tempHumidityChart) tempHumidityChart.destroy();
                 const tempCanvas = document.getElementById('tempHumidityChart');
                 if (tempCanvas) {
                     tempHumidityChart = initTemperatureHumidityChart(
@@ -205,10 +228,8 @@
                         { labels, temperatures: temps, humidities: hums }
                     );
                 }
-                
-                if (motionDistanceChart) {
-                    motionDistanceChart.destroy();
-                }
+
+                if (motionDistanceChart) motionDistanceChart.destroy();
                 const motionCanvas = document.getElementById('motionDistanceChart');
                 if (motionCanvas) {
                     motionDistanceChart = initMotionDistanceChart(
@@ -219,45 +240,38 @@
             })
             .catch(err => {
                 console.error('Error fetching readings:', err);
-                // Show sample data on error
-                const data = generateSampleReadings();
-                const labels = data.map(r => new Date(r.time).toLocaleTimeString());
-                const temps = data.map(r => r.temperature);
-                const hums = data.map(r => r.humidity);
-                const motions = data.map(r => r.motion);
-                const distances = data.map(r => r.distance_cm);
-                
-                if (tempHumidityChart) tempHumidityChart.destroy();
-                tempHumidityChart = initTemperatureHumidityChart(
-                    document.getElementById('tempHumidityChart').getContext('2d'),
-                    { labels, temperatures: temps, humidities: hums }
-                );
-                
-                if (motionDistanceChart) motionDistanceChart.destroy();
-                motionDistanceChart = initMotionDistanceChart(
-                    document.getElementById('motionDistanceChart').getContext('2d'),
-                    { labels, motions, distances }
-                );
+                renderEmptyCharts('Error fetching readings');
             });
     }
-    
-    // Generate sample reading data for demo/testing
-    function generateSampleReadings() {
-        const data = [];
-        const now = new Date();
-        for (let i = 23; i >= 0; i--) {
-            const time = new Date(now.getTime() - i * 60 * 60000);
-            data.push({
-                timestamp: time.toISOString(),
-                temperature: 36.5 + Math.random() * 1.5,
-                humidity: 50 + Math.random() * 20,
-                motion: Math.random() > 0.7 ? 1 : 0,
-                distance_cm: 85 + Math.random() * 10
-            });
+
+    function renderEmptyCharts(message) {
+        const labels = [];
+        const temps = [];
+        const hums = [];
+        const motions = [];
+        const distances = [];
+
+        if (tempHumidityChart) tempHumidityChart.destroy();
+        const tempCanvas = document.getElementById('tempHumidityChart');
+        if (tempCanvas) {
+            tempHumidityChart = initTemperatureHumidityChart(
+                tempCanvas.getContext('2d'),
+                { labels, temperatures: temps, humidities: hums }
+            );
         }
-        return data;
+
+        if (motionDistanceChart) motionDistanceChart.destroy();
+        const motionCanvas = document.getElementById('motionDistanceChart');
+        if (motionCanvas) {
+            motionDistanceChart = initMotionDistanceChart(
+                motionCanvas.getContext('2d'),
+                { labels, motions, distances }
+            );
+        }
+
+        console.warn(message);
     }
-    
+
     function loadAlerts() {
         fetch('/api/alerts')
             .then(r => r.json())
@@ -278,9 +292,7 @@
                         <td><span class="badge bg-warning">${alert.alert_type}</span></td>
                         <td>${alert.message}</td>
                         <td>
-                            <span class="badge ${alert.status === 'new' ? 'bg-danger' : 'bg-success'}">
-                                ${alert.status}
-                            </span>
+                            <span class="badge ${alert.status === 'new' ? 'bg-danger' : 'bg-success'}">${alert.status}</span>
                         </td>
                         <td>
                             ${alert.status === 'new' ? 

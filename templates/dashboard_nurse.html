@@ -235,6 +235,24 @@
             const motionText = b.motion ? 'Detected' : 'None';
             const motionBadge = b.motion ? '<span class="badge bg-success">Detected</span>' : '<span class="badge bg-secondary">None</span>';
             const distanceText = (b.distance_cm !== undefined && b.distance_cm !== null) ? (b.distance_cm.toFixed(1) + ' cm') : '--';
+            
+            // Format last updated timestamp
+            let lastUpdatedText = '--';
+            if (b.timestamp) {
+                const readingTime = new Date(b.timestamp);
+                const now = new Date();
+                const diffMs = now - readingTime;
+                const diffSecs = Math.floor(diffMs / 1000);
+                const diffMins = Math.floor(diffSecs / 60);
+                
+                if (diffSecs < 60) {
+                    lastUpdatedText = `${diffSecs}s ago`;
+                } else if (diffMins < 60) {
+                    lastUpdatedText = `${diffMins}m ago`;
+                } else {
+                    lastUpdatedText = readingTime.toLocaleTimeString();
+                }
+            }
 
             html += `
                 <div class="col-12">
@@ -261,9 +279,12 @@
                                     <div class="h5 mb-0">${distanceText}</div>
                                 </div>
                             </div>
-                            <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div>${motionBadge}</div>
                                 <a href="/beds/${b.bed_id}" class="btn btn-primary btn-sm">View Details</a>
+                            </div>
+                            <div class="pt-2 border-top">
+                                <small class="text-muted d-block">Last updated: <strong>${lastUpdatedText}</strong></small>
                             </div>
                         </div>
                     </div>
