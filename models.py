@@ -46,17 +46,64 @@ def verify_password(user, password):
     """Verify password against stored hash"""
     return check_password_hash(user['password_hash'], password)
 
-def list_nurses():
-    """Get all users with role 'nurse'"""
+def record_failed_login(username):
+    """Record a failed login attempt and lock account if threshold exceeded"""
     db = get_db()
     try:
-        nurses = db.execute(
-            'SELECT * FROM users WHERE role = ? ORDER BY username',
-            ('nurse',)
-        ).fetchall()
-        return [dict(n) for n in nurses]
+        user = db.execute('SELECT id, failed_login_attempts FROM users WHERE username = ?', (username,)).fetchone()
+        if user:
+            failed_attempts = user['failed_login_attempts'] + 1
+            if failed_attempts >= 5:
+                # Lock the account
+                db.execute('''
+                    UPDATE users 
+                    SET failed_login_attempts = ?, locked_at = CURRENT_TIMESTAMP, last_login_attempt = CURRENT_TIMESTAMP
+                    WHERE username = ?
+                ''', (failed_attempts, username))
+            else:
+                db.execute('''
+                    UPDATE users 
+                    SET failed_login_attempts = ?, last_login_attempt = CURRENT_TIMESTAMP
+                    WHERE username = ?
+                ''', (failed_attempts, username))
+            db.commit()
+            return failed_attempts
+        return 0
     finally:
         db.close()
+
+def reset_failed_login(username):
+    """Reset failed login attempts on successful login"""
+    db = get_db()
+    try:
+        db.execute('''
+            UPDATE users 
+            SET failed_login_attempts = 0, last_login_attempt = CURRENT_TIMESTAMP
+            WHERE username = ?
+        ''', (username,))
+        db.commit()
+    finally:
+        db.close()
+
+def unlock_user_account(user_id):
+    """Unlock a locked user account (admin function)"""
+    db = get_db()
+    try:
+        db.execute('''
+            UPDATE users 
+            SET failed_login_attempts = 0, locked_at = NULL
+            WHERE id = ?
+        ''', (user_id,))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+def is_account_locked(user):
+    """Check if account is locked"""
+    if user.get('locked_at'):
+        return True
+    return False
 
 def list_all_users():
     """Get all users"""
@@ -194,20 +241,6 @@ def get_nurse_beds(nurse_id):
     finally:
         db.close()
 
-def get_bed_nurses(bed_id):
-    """Get all nurses assigned to a bed"""
-    db = get_db()
-    try:
-        nurses = db.execute('''
-            SELECT u.* FROM users u
-            INNER JOIN nurse_assignments na ON u.id = na.nurse_id
-            WHERE na.bed_id = ?
-            ORDER BY u.username
-        ''', (bed_id,)).fetchall()
-        return [dict(n) for n in nurses]
-    finally:
-        db.close()
-
 # ==================== READINGS ====================
 
 def insert_reading(bed_id, temperature=None, humidity=None, motion=None, distance_cm=None):
@@ -273,33 +306,6 @@ def create_alert(bed_id, alert_type, message):
         ''', (bed_id, alert_type, message))
         db.commit()
         return cursor.lastrowid
-    finally:
-        db.close()
-
-def get_active_alerts(nurse_id=None):
-    """Get active (new) alerts, optionally filtered by nurse assignments"""
-    db = get_db()
-    try:
-        if nurse_id:
-            # Only alerts for beds assigned to this nurse
-            alerts = db.execute('''
-                SELECT a.*, b.bed_name, b.room_no
-                FROM alerts a
-                INNER JOIN beds b ON a.bed_id = b.id
-                INNER JOIN nurse_assignments na ON b.id = na.bed_id
-                WHERE a.status = 'new' AND na.nurse_id = ?
-                ORDER BY a.created_at DESC
-            ''', (nurse_id,)).fetchall()
-        else:
-            # All alerts for admin
-            alerts = db.execute('''
-                SELECT a.*, b.bed_name, b.room_no
-                FROM alerts a
-                INNER JOIN beds b ON a.bed_id = b.id
-                WHERE a.status = 'new'
-                ORDER BY a.created_at DESC
-            ''').fetchall()
-        return [dict(a) for a in alerts]
     finally:
         db.close()
 
@@ -381,25 +387,7 @@ def update_device_status(esp_id, ip=None):
     finally:
         db.close()
 
-def list_devices():
-    """Get all devices"""
-    db = get_db()
-    try:
-        devices = db.execute('SELECT * FROM devices ORDER BY esp_id').fetchall()
-        return [dict(d) for d in devices]
-    finally:
-        db.close()
-
 # ==================== SETTINGS ====================
-
-def get_setting(key, default=None):
-    """Get a setting value by key"""
-    db = get_db()
-    try:
-        setting = db.execute('SELECT value FROM settings WHERE key = ?', (key,)).fetchone()
-        return float(setting['value']) if setting else default
-    finally:
-        db.close()
 
 def set_setting(key, value):
     """Set a setting value"""
@@ -419,7 +407,18 @@ def get_all_settings():
     db = get_db()
     try:
         settings = db.execute('SELECT key, value FROM settings').fetchall()
-        return {s['key']: float(s['value']) for s in settings}
+        result = {}
+        for s in settings:
+            # Time-based settings remain as strings
+            if 'time' in s['key']:
+                result[s['key']] = s['value']
+            else:
+                # Numeric settings converted to float
+                try:
+                    result[s['key']] = float(s['value'])
+                except ValueError:
+                    result[s['key']] = s['value']
+        return result
     finally:
         db.close()
 
@@ -497,6 +496,44 @@ def get_stats_overview(nurse_id=None):
             stats['avg_temperature'] = None
 
         return stats
+    finally:
+        db.close()
+
+
+# ==================== AUDIT LOGGING ====================
+
+def log_event(user_id, username, action, target_type=None, target_id=None, details=None, ip_address=None):
+    """Log an audit event"""
+    db = get_db()
+    try:
+        db.execute('''
+            INSERT INTO audit_logs (user_id, username, action, target_type, target_id, details, ip_address)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, username, action, target_type, target_id, details, ip_address))
+        db.commit()
+    finally:
+        db.close()
+
+def get_audit_logs(limit=100, user_id=None, action_filter=None):
+    """Get audit logs with optional filters"""
+    db = get_db()
+    try:
+        query = 'SELECT * FROM audit_logs WHERE 1=1'
+        params = []
+        
+        if user_id:
+            query += ' AND user_id = ?'
+            params.append(user_id)
+        
+        if action_filter:
+            query += ' AND action LIKE ?'
+            params.append(f'%{action_filter}%')
+        
+        query += ' ORDER BY timestamp DESC LIMIT ?'
+        params.append(limit)
+        
+        logs = db.execute(query, params).fetchall()
+        return [dict(log) for log in logs]
     finally:
         db.close()
 

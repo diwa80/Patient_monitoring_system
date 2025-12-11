@@ -134,57 +134,48 @@
         </div>
     </div>
 
-    <!-- Fever & Restlessness Settings -->
+    <!-- Restlessness Settings -->
     <div class="row mb-4">
-        <div class="col-lg-6">
-            <div class="card settings-card">
-                <div class="card-header settings-card-header">
-                    <i class="fas fa-fire text-danger"></i>
-                    <h5 class="mb-0">Fever Detection</h5>
-                </div>
-                <div class="card-body">
-                    <div class="setting-group">
-                        <label for="fever_temp_threshold" class="form-label">
-                            <i class="fas fa-thermometer-half"></i> Fever Threshold
-                        </label>
-                        <div class="input-group">
-                            <input type="number" step="0.1" class="form-control" id="fever_temp_threshold" name="fever_temp_threshold" required>
-                            <span class="input-group-text">°C</span>
-                        </div>
-                        <small class="text-muted">Absolute temperature indicating fever</small>
-                    </div>
-                    
-                    <div class="setting-group">
-                        <label for="fever_temp_increase" class="form-label">
-                            <i class="fas fa-arrow-up"></i> Temperature Increase
-                        </label>
-                        <div class="input-group">
-                            <input type="number" step="0.1" class="form-control" id="fever_temp_increase" name="fever_temp_increase" required>
-                            <span class="input-group-text">°C</span>
-                        </div>
-                        <small class="text-muted">Sudden temperature rise indicating fever</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Restlessness Settings -->
-        <div class="col-lg-6">
+        <div class="col-lg-12">
             <div class="card settings-card">
                 <div class="card-header settings-card-header">
                     <i class="fas fa-person-hiking text-primary"></i>
-                    <h5 class="mb-0">Activity Monitoring</h5>
+                    <h5 class="mb-0">Activity Monitoring - Restlessness Detection</h5>
                 </div>
                 <div class="card-body">
-                    <div class="setting-group">
-                        <label for="restlessness_motions_per_hour" class="form-label">
-                            <i class="fas fa-wave-square"></i> Restlessness Threshold
-                        </label>
-                        <div class="input-group">
-                            <input type="number" step="0.1" class="form-control" id="restlessness_motions_per_hour" name="restlessness_motions_per_hour" required>
-                            <span class="input-group-text">motions/hour</span>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="setting-group">
+                                <label for="restlessness_motions_per_hour" class="form-label">
+                                    <i class="fas fa-wave-square"></i> Motion Threshold
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" step="0.1" class="form-control" id="restlessness_motions_per_hour" name="restlessness_motions_per_hour" required>
+                                    <span class="input-group-text">per/hr</span>
+                                </div>
+                                <small class="text-muted">Motions per hour</small>
+                            </div>
                         </div>
-                        <small class="text-muted">Alert if motion rate exceeds this during night hours</small>
+                        
+                        <div class="col-md-4">
+                            <div class="setting-group">
+                                <label for="restlessness_start_time" class="form-label">
+                                    <i class="fas fa-play-circle"></i> Start Time
+                                </label>
+                                <input type="time" class="form-control" id="restlessness_start_time" name="restlessness_start_time" required>
+                                <small class="text-muted">Detection begins</small>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="setting-group">
+                                <label for="restlessness_end_time" class="form-label">
+                                    <i class="fas fa-stop-circle"></i> End Time
+                                </label>
+                                <input type="time" class="form-control" id="restlessness_end_time" name="restlessness_end_time" required>
+                                <small class="text-muted">Detection ends</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -366,8 +357,8 @@
             document.getElementById('no_motion_timeout_minutes').value = data.no_motion_timeout_minutes || 30;
             document.getElementById('fall_drop_threshold_cm').value = data.fall_drop_threshold_cm || 30.0;
             document.getElementById('restlessness_motions_per_hour').value = data.restlessness_motions_per_hour || 20.0;
-            document.getElementById('fever_temp_threshold').value = data.fever_temp_threshold || 37.5;
-            document.getElementById('fever_temp_increase').value = data.fever_temp_increase || 1.5;
+            document.getElementById('restlessness_start_time').value = data.restlessness_start_time || '22:00';
+            document.getElementById('restlessness_end_time').value = data.restlessness_end_time || '06:00';
             document.getElementById('low_humidity_danger').value = data.low_humidity_danger || 30.0;
             document.getElementById('high_humidity_danger').value = data.high_humidity_danger || 70.0;
         })

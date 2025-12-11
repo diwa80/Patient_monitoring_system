@@ -61,6 +61,11 @@
                         <i class="fas fa-procedures"></i> <span>Beds</span>
                     </a>
                 </li>
+                <li>
+                    <a href="{{ url_for('logs_page') }}" data-tooltip="Audit Logs">
+                        <i class="fas fa-history"></i> <span>Logs</span>
+                    </a>
+                </li>
                 {% endif %}
                 <li>
                     <a href="{{ url_for('logout') }}" data-tooltip="Logout">

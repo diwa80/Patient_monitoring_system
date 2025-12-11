@@ -4,10 +4,8 @@ Flask server for Patient Room Environmental & Activity Monitoring System
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from functools import wraps
-from werkzeug.security import check_password_hash
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
-import sqlite3
 
 from database import init_db, get_db
 import models
@@ -18,10 +16,31 @@ app = Flask(__name__)
 app.secret_key = 'patient-monitoring-secret-key-change-in-production-2024'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = 1800  # 30 minutes in seconds
 
 # Initialize database on startup
 with app.app_context():
     init_db()
+
+# ==================== SESSION TIMEOUT MIDDLEWARE ====================
+
+@app.before_request
+def check_session_timeout():
+    """Check if session has timed out due to inactivity"""
+    if 'user_id' in session:
+        last_activity = session.get('last_activity')
+        if last_activity:
+            try:
+                last_activity_time = datetime.fromisoformat(last_activity)
+                # 30 minutes timeout
+                if (datetime.now() - last_activity_time).total_seconds() > 1800:
+                    session.clear()
+                    flash('Session expired due to inactivity. Please login again.', 'info')
+                    return redirect(url_for('login'))
+            except:
+                pass
+        # Update last activity time for every request
+        session['last_activity'] = datetime.now().isoformat()
 
 # ==================== DECORATORS ====================
 
@@ -44,18 +63,6 @@ def admin_required(f):
             return jsonify({'error': 'Admin access required'}), 403
         return f(*args, **kwargs)
     return decorated_function
-
-def nurse_required(f):
-    """Require user to be nurse"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        if session.get('role') != 'nurse':
-            return jsonify({'error': 'Nurse access required'}), 403
-        return f(*args, **kwargs)
-    return decorated_function
-
 
 def permission_required(menu_key):
     """Require that the current user either be admin or have the given menu permission."""
@@ -92,14 +99,30 @@ def login():
         
         user = models.get_user_by_username(username)
         
-        if user and models.verify_password(user, password):
-            if user['status'] != 'active':
-                flash('Your account is disabled', 'error')
-                return render_template('login.html')
+        if not user:
+            flash('Invalid username or password', 'error')
+            return render_template('login.html')
+        
+        # Check if account is locked
+        if models.is_account_locked(user):
+            flash('Account is locked due to multiple failed login attempts. Contact administrator.', 'error')
+            return render_template('login.html')
+        
+        # Check if account is disabled
+        if user['status'] != 'active':
+            flash('Your account is disabled', 'error')
+            return render_template('login.html')
+        
+        # Verify password
+        if models.verify_password(user, password):
+            # Reset failed login attempts on successful login
+            models.reset_failed_login(username)
             
             session['user_id'] = user['id']
             session['username'] = user['username']
             session['role'] = user['role']
+            session['last_activity'] = datetime.now().isoformat()
+            
             # load menu permissions (stored as JSON string) into session as a list
             mp = user.get('menu_permissions')
             try:
@@ -112,9 +135,38 @@ def login():
             except Exception:
                 session['menu_permissions'] = []
             
+            # Log successful login
+            models.log_event(
+                user['id'],
+                username,
+                'LOGIN_SUCCESS',
+                'user',
+                user['id'],
+                f"User {username} logged in",
+                request.remote_addr
+            )
+            
             return redirect(url_for('dashboard'))
         else:
-            flash('Invalid username or password', 'error')
+            # Record failed login attempt
+            failed_attempts = models.record_failed_login(username)
+            remaining = 5 - failed_attempts
+            
+            # Log failed login
+            models.log_event(
+                user['id'] if user else None,
+                username,
+                'LOGIN_FAILED',
+                'user',
+                user['id'] if user else None,
+                f"Failed login attempt ({failed_attempts}/5)",
+                request.remote_addr
+            )
+            
+            if remaining > 0:
+                flash(f'Invalid username or password. {remaining} attempts remaining before account lockout.', 'error')
+            else:
+                flash('Account locked due to multiple failed login attempts. Contact administrator.', 'error')
             return render_template('login.html')
     
     return render_template('login.html')
@@ -122,6 +174,17 @@ def login():
 @app.route('/logout')
 def logout():
     """Logout and clear session"""
+    if 'user_id' in session:
+        # Log logout before clearing session
+        models.log_event(
+            session['user_id'],
+            session['username'],
+            'LOGOUT',
+            'user',
+            session['user_id'],
+            f"User {session['username']} logged out",
+            request.remote_addr
+        )
     session.clear()
     flash('You have been logged out', 'info')
     return redirect(url_for('login'))
@@ -198,7 +261,17 @@ def bed_management():
             flash('Bed name is required', 'error')
             return redirect(url_for('bed_management'))
         try:
-            models.create_bed(bed_name, room_no)
+            bed_id = models.create_bed(bed_name, room_no)
+            # Log bed creation
+            models.log_event(
+                session['user_id'],
+                session['username'],
+                'CREATE_BED',
+                'bed',
+                bed_id,
+                f"Created bed: {bed_name} (Room: {room_no or 'N/A'})",
+                request.remote_addr
+            )
             flash('Bed created', 'success')
         except Exception as e:
             flash('Failed to create bed: ' + str(e), 'error')
@@ -222,6 +295,16 @@ def delete_bed(bed_id):
         db.execute('DELETE FROM beds WHERE id = ?', (bed_id,))
         db.commit()
         db.close()
+        # Log bed deletion
+        models.log_event(
+            session['user_id'],
+            session['username'],
+            'DELETE_BED',
+            'bed',
+            bed_id,
+            f"Deleted bed ID: {bed_id}",
+            request.remote_addr
+        )
         flash('Bed and related data deleted', 'success')
     except Exception as e:
         flash('Failed to delete bed: ' + str(e), 'error')
@@ -244,8 +327,8 @@ def settings_page():
             'no_motion_timeout_minutes': float(request.form.get('no_motion_timeout_minutes')),
             'fall_drop_threshold_cm': float(request.form.get('fall_drop_threshold_cm', 30.0)),
             'restlessness_motions_per_hour': float(request.form.get('restlessness_motions_per_hour', 20.0)),
-            'fever_temp_threshold': float(request.form.get('fever_temp_threshold', 37.5)),
-            'fever_temp_increase': float(request.form.get('fever_temp_increase', 1.5)),
+            'restlessness_start_time': request.form.get('restlessness_start_time', '22:00'),
+            'restlessness_end_time': request.form.get('restlessness_end_time', '06:00'),
             'low_humidity_danger': float(request.form.get('low_humidity_danger', 30.0)),
             'high_humidity_danger': float(request.form.get('high_humidity_danger', 70.0))
         }
@@ -253,10 +336,28 @@ def settings_page():
         for key, value in settings.items():
             models.set_setting(key, value)
         
+        # Log settings update
+        models.log_event(
+            session['user_id'],
+            session['username'],
+            'UPDATE_SETTINGS',
+            'settings',
+            None,
+            f'Updated system settings',
+            request.remote_addr
+        )
+        
         flash('Settings updated successfully', 'success')
         return redirect(url_for('settings_page'))
     
     return render_template('settings.html')
+
+@app.route('/logs')
+@login_required
+@admin_required
+def logs_page():
+    """Audit logs page (admin only)"""
+    return render_template('logs.html')
 
 # ==================== API ROUTES ====================
 
@@ -497,7 +598,7 @@ def api_chart_alerts():
         if not rows:
             # Return sample data if no alerts available
             return jsonify({
-                'labels': ['Fever Warning', 'Bed Exit', 'Motion Alert'],
+                'labels': ['Bed Exit', 'Motion Alert', 'Humidity Alert'],
                 'counts': [5, 3, 2]
             })
         
@@ -521,6 +622,16 @@ def api_resolve_alert(alert_id):
                 return jsonify({'error': 'Access denied'}), 403
         
         models.resolve_alert(alert_id)
+        # Log alert resolution
+        models.log_event(
+            session['user_id'],
+            session['username'],
+            'RESOLVE_ALERT',
+            'alert',
+            alert_id,
+            f"Resolved alert ID: {alert_id}",
+            request.remote_addr
+        )
         return jsonify({'status': 'ok'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -572,6 +683,17 @@ def api_create_user():
                         models.assign_nurse_to_bed(user_id, bid)
                     except:
                         continue
+            
+            # Log user creation
+            models.log_event(
+                session['user_id'],
+                session['username'],
+                'CREATE_USER',
+                'user',
+                user_id,
+                f"Created {role} user: {username}",
+                request.remote_addr
+            )
 
             return jsonify({'status': 'ok', 'user_id': user_id})
         else:
@@ -681,9 +803,20 @@ def api_change_user_password(user_id):
         db = get_db()
         from werkzeug.security import generate_password_hash
         hashed = generate_password_hash(new_password)
-        db.execute('UPDATE users SET password = ? WHERE id = ?', (hashed, user_id))
+        db.execute('UPDATE users SET password_hash = ? WHERE id = ?', (hashed, user_id))
         db.commit()
         db.close()
+        
+        # Log password change
+        models.log_event(
+            session['user_id'],
+            session['username'],
+            'CHANGE_PASSWORD',
+            'user',
+            user_id,
+            f"Changed password for user ID: {user_id}",
+            request.remote_addr
+        )
         
         return jsonify({'status': 'ok', 'message': 'Password changed successfully'})
     except Exception as e:
@@ -695,8 +828,39 @@ def api_change_user_password(user_id):
 def api_delete_user(user_id):
     """Delete a user and related assignments"""
     try:
+        # Log before deletion
+        models.log_event(
+            session['user_id'],
+            session['username'],
+            'DELETE_USER',
+            'user',
+            user_id,
+            f"Deleted user ID: {user_id}",
+            request.remote_addr
+        )
         models.delete_user(user_id)
         return jsonify({'status': 'ok'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/users/<int:user_id>/unlock', methods=['POST'])
+@login_required
+@admin_required
+def api_unlock_user(user_id):
+    """Unlock a locked user account"""
+    try:
+        models.unlock_user_account(user_id)
+        # Log unlock action
+        models.log_event(
+            session['user_id'],
+            session['username'],
+            'UNLOCK_USER',
+            'user',
+            user_id,
+            f"Unlocked user account ID: {user_id}",
+            request.remote_addr
+        )
+        return jsonify({'status': 'ok', 'message': 'Account unlocked successfully'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -765,6 +929,24 @@ def api_settings():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/logs')
+@login_required
+@admin_required
+def api_logs():
+    """Get audit logs"""
+    try:
+        limit = int(request.args.get('limit', 100))
+        user_filter = request.args.get('user_id')
+        action_filter = request.args.get('action')
+        
+        logs = models.get_audit_logs(
+            limit=limit,
+            user_id=int(user_filter) if user_filter else None,
+            action_filter=action_filter
+        )
+        return jsonify(logs)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-

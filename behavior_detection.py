@@ -23,8 +23,6 @@ def initialize_bed_state(bed_id):
             'last_distance': None,
             'motion_count_night': 0,
             'night_start': None,
-            'last_temperature': None,
-            'last_temperature_time': None,
             'last_humidity': None
         }
 
@@ -46,7 +44,7 @@ def detect_abnormal_behaviors(bed_id, temperature, humidity, motion, distance_cm
     
     # 1. Patient trying to get off bed (distance + motion)
     # Already handled in server.py as 'bed_exit', but we'll enhance it
-    if motion == 1 and distance_cm > settings.get('distance_bed_exit_cm', 50.0):
+    if motion == 1 and distance_cm > float(settings.get('distance_bed_exit_cm', 50.0)):
         behaviors.append((
             'bed_exit',
             f'Patient attempting to get off bed: Motion detected with distance {distance_cm:.1f}cm',
@@ -56,7 +54,7 @@ def detect_abnormal_behaviors(bed_id, temperature, humidity, motion, distance_cm
     # 2. Possible fall (sudden large drop in distance)
     if state['last_distance'] is not None and distance_cm > 0 and state['last_distance'] > 0:
         distance_drop = state['last_distance'] - distance_cm
-        fall_threshold = settings.get('fall_drop_threshold_cm', 30.0)
+        fall_threshold = float(settings.get('fall_drop_threshold_cm', 30.0))
         
         if distance_drop > fall_threshold and distance_cm < 20:  # Fell close to sensor
             behaviors.append((
@@ -70,7 +68,7 @@ def detect_abnormal_behaviors(bed_id, temperature, humidity, motion, distance_cm
         state['last_distance'] = distance_cm
     
     # 3. Long inactivity (no motion for X minutes)
-    no_motion_timeout = settings.get('no_motion_timeout_minutes', 30)
+    no_motion_timeout = float(settings.get('no_motion_timeout_minutes', 30))
     
     if motion == 1:
         state['last_motion_time'] = current_time
@@ -88,16 +86,28 @@ def detect_abnormal_behaviors(bed_id, temperature, humidity, motion, distance_cm
                 ))
                 state['last_inactivity_alert_time'] = current_time
     
-    # 4. Restlessness at night (frequent motion)
+    # 4. Restlessness at night (frequent motion) - only during configured time window
     current_hour = current_time.hour
-    is_night = current_hour >= 22 or current_hour < 6  # 10 PM to 6 AM
+    current_minute = current_time.minute
+    current_time_str = f"{current_hour:02d}:{current_minute:02d}"
     
-    if is_night:
+    # Get time window settings
+    start_time_str = settings.get('restlessness_start_time', '22:00')
+    end_time_str = settings.get('restlessness_end_time', '06:00')
+    
+    # Check if current time is within restlessness detection window
+    is_in_window = False
+    if start_time_str < end_time_str:  # Normal case: 8:00 to 17:00
+        is_in_window = start_time_str <= current_time_str < end_time_str
+    else:  # Overnight case: 22:00 to 06:00
+        is_in_window = current_time_str >= start_time_str or current_time_str < end_time_str
+    
+    if is_in_window:
         if state['night_start'] is None:
             state['night_start'] = current_time
             state['motion_count_night'] = 0
         
-        # Reset if new night period
+        # Reset if new period
         if (current_time - state['night_start']).total_seconds() > 28800:  # 8 hours
             state['night_start'] = current_time
             state['motion_count_night'] = 0
@@ -105,56 +115,26 @@ def detect_abnormal_behaviors(bed_id, temperature, humidity, motion, distance_cm
         if motion == 1:
             state['motion_count_night'] += 1
         
-        # Check for restlessness (more than threshold motions in 1 hour during night)
+        # Check for restlessness (more than threshold motions in 1 hour)
         night_duration = (current_time - state['night_start']).total_seconds() / 3600  # hours
         if night_duration > 0:
             motion_rate = state['motion_count_night'] / night_duration
-            restlessness_threshold = settings.get('restlessness_motions_per_hour', 20.0)
+            restlessness_threshold = float(settings.get('restlessness_motions_per_hour', 20.0))
             
             if motion_rate > restlessness_threshold:
                 behaviors.append((
                     'restlessness_night',
-                    f'Restlessness detected: {state["motion_count_night"]} motions in {night_duration:.1f} hours during night (rate: {motion_rate:.1f}/hr, threshold: {restlessness_threshold}/hr)',
+                    f'Restlessness detected: {state["motion_count_night"]} motions in {night_duration:.1f} hours (rate: {motion_rate:.1f}/hr, threshold: {restlessness_threshold}/hr)',
                     'warning'
                 ))
     else:
-        # Reset night tracking during day
+        # Reset tracking outside detection window
         state['night_start'] = None
         state['motion_count_night'] = 0
     
-    # 5. Sudden temperature rise (fever warning)
-    if state['last_temperature'] is not None and temperature > 0:
-        temp_increase = temperature - state['last_temperature']
-        temp_increase_threshold = 1.5  # °C increase in short time
-        
-        # Check if significant increase in last 30 minutes
-        if state['last_temperature_time'] is not None:
-            time_diff = (current_time - state['last_temperature_time']).total_seconds() / 60  # minutes
-            
-            if time_diff <= 30 and temp_increase > temp_increase_threshold:
-                behaviors.append((
-                    'fever_warning',
-                    f'Sudden temperature rise: {state["last_temperature"]:.1f}°C to {temperature:.1f}°C (+{temp_increase:.1f}°C in {time_diff:.1f} min) - Possible fever',
-                    'warning'
-                ))
-        
-        # Also check absolute high temperature
-        fever_threshold = settings.get('fever_temp_threshold', 37.5)
-        if temperature > fever_threshold:
-            behaviors.append((
-                'high_temperature',
-                f'Elevated temperature detected: {temperature:.1f}°C - Possible fever (threshold: {fever_threshold}°C)',
-                'warning'
-            ))
-    
-    # Update temperature tracking
-    if temperature > 0:
-        state['last_temperature'] = temperature
-        state['last_temperature_time'] = current_time
-    
-    # 6. Dangerous room humidity (breathing issues)
+    # 5. Dangerous room humidity (breathing issues)
     # Low humidity (dry air) - can cause breathing issues
-    low_humidity_threshold = settings.get('low_humidity_danger', 30.0)
+    low_humidity_threshold = float(settings.get('low_humidity_danger', 30.0))
     if humidity < low_humidity_threshold:
         behaviors.append((
             'low_humidity_danger',
@@ -163,7 +143,7 @@ def detect_abnormal_behaviors(bed_id, temperature, humidity, motion, distance_cm
         ))
     
     # Very high humidity - can cause breathing issues
-    high_humidity_threshold = settings.get('high_humidity_danger', 70.0)
+    high_humidity_threshold = float(settings.get('high_humidity_danger', 70.0))
     if humidity > high_humidity_threshold:
         behaviors.append((
             'high_humidity_danger',

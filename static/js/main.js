@@ -316,7 +316,7 @@ function showAlertNotification(alert) {
     let notificationType = 'info';
     let icon = 'fa-info-circle';
     
-    if (alert.alert_type === 'fever_warning' || alert.alert_type === 'high_temperature') {
+    if (alert.alert_type === 'high_temperature') {
         notificationType = 'warning';
         icon = 'fa-thermometer-half';
     } else if (alert.alert_type === 'long_inactivity' || alert.alert_type === 'restlessness_night') {

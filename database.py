@@ -3,7 +3,6 @@ Database helper module for Patient Monitoring System
 """
 
 import sqlite3
-import os
 from pathlib import Path
 
 DATABASE = 'patient_monitoring.db'
@@ -39,6 +38,15 @@ def init_db():
             if 'menu_permissions' not in cols:
                 conn.execute("ALTER TABLE users ADD COLUMN menu_permissions TEXT")
                 conn.commit()
+            if 'failed_login_attempts' not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0")
+                conn.commit()
+            if 'locked_at' not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN locked_at DATETIME")
+                conn.commit()
+            if 'last_login_attempt' not in cols:
+                conn.execute("ALTER TABLE users ADD COLUMN last_login_attempt DATETIME")
+                conn.commit()
         except Exception:
             # if anything goes wrong with migration, continue without failing init
             pass
@@ -47,4 +55,3 @@ def init_db():
         print(f"Database initialized: {db_path}")
     else:
         print(f"Warning: schema.sql not found at {schema_path}")
-

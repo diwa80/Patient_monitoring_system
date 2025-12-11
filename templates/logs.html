@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Logs - Patient Monitoring{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <h2><i class="fas fa-history"></i> Audit Logs</h2>
+    <p class="text-muted">Monitor all system activities and user actions</p>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label"><i class="fas fa-filter"></i> Action Type</label>
+                <select id="actionFilter" class="form-select">
+                    <option value="">All Actions</option>
+                    <option value="LOGIN">Login Events</option>
+                    <option value="LOGOUT">Logout Events</option>
+                    <option value="CREATE">Create Actions</option>
+                    <option value="DELETE">Delete Actions</option>
+                    <option value="UPDATE">Update Actions</option>
+                    <option value="UNLOCK">Unlock Actions</option>
+                    <option value="RESOLVE">Resolve Actions</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label"><i class="fas fa-list-ol"></i> Show Records</label>
+                <select id="limitFilter" class="form-select">
+                    <option value="50">50 Records</option>
+                    <option value="100" selected>100 Records</option>
+                    <option value="200">200 Records</option>
+                    <option value="500">500 Records</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">&nbsp;</label>
+                <button class="btn btn-primary w-100" onclick="loadLogs()">
+                    <i class="fas fa-search"></i> Apply Filters
+                </button>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">&nbsp;</label>
+                <button class="btn btn-secondary w-100" onclick="resetFilters()">
+                    <i class="fas fa-redo"></i> Reset
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Logs Table -->
+<div class="card">
+    <div class="card-header bg-dark text-white">
+        <h5 class="mb-0"><i class="fas fa-list"></i> System Activity Log</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th width="15%">Timestamp</th>
+                        <th width="12%">User</th>
+                        <th width="18%">Action</th>
+                        <th width="12%">Target</th>
+                        <th>Details</th>
+                        <th width="12%">IP Address</th>
+                    </tr>
+                </thead>
+                <tbody id="logsTableBody">
+                    <tr>
+                        <td colspan="6" class="text-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                            Loading logs...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+.page-header {
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 1rem;
+}
+
+.table td, .table th {
+    vertical-align: middle;
+}
+
+.badge-action {
+    font-size: 0.75rem;
+    padding: 0.35em 0.65em;
+}
+
+.log-details {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.action-icon {
+    width: 20px;
+    text-align: center;
+    display: inline-block;
+}
+
+/* Action type colors */
+.action-login { color: #28a745; }
+.action-logout { color: #6c757d; }
+.action-create { color: #007bff; }
+.action-delete { color: #dc3545; }
+.action-update { color: #ffc107; }
+.action-unlock { color: #17a2b8; }
+.action-resolve { color: #20c997; }
+.action-failed { color: #dc3545; }
+</style>
+
+<script>
+function getActionIcon(action) {
+    if (action.includes('LOGIN_SUCCESS')) return '<i class="fas fa-sign-in-alt action-icon action-login"></i>';
+    if (action.includes('LOGIN_FAILED')) return '<i class="fas fa-exclamation-triangle action-icon action-failed"></i>';
+    if (action.includes('LOGOUT')) return '<i class="fas fa-sign-out-alt action-icon action-logout"></i>';
+    if (action.includes('CREATE')) return '<i class="fas fa-plus-circle action-icon action-create"></i>';
+    if (action.includes('DELETE')) return '<i class="fas fa-trash action-icon action-delete"></i>';
+    if (action.includes('UPDATE')) return '<i class="fas fa-edit action-icon action-update"></i>';
+    if (action.includes('UNLOCK')) return '<i class="fas fa-unlock action-icon action-unlock"></i>';
+    if (action.includes('RESOLVE')) return '<i class="fas fa-check-circle action-icon action-resolve"></i>';
+    return '<i class="fas fa-circle action-icon"></i>';
+}
+
+function getActionBadge(action) {
+    if (action.includes('LOGIN_SUCCESS')) return 'success';
+    if (action.includes('LOGIN_FAILED')) return 'danger';
+    if (action.includes('LOGOUT')) return 'secondary';
+    if (action.includes('CREATE')) return 'primary';
+    if (action.includes('DELETE')) return 'danger';
+    if (action.includes('UPDATE')) return 'warning';
+    if (action.includes('UNLOCK')) return 'info';
+    if (action.includes('RESOLVE')) return 'success';
+    return 'secondary';
+}
+
+function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+function loadLogs() {
+    const tbody = document.getElementById('logsTableBody');
+    const actionFilter = document.getElementById('actionFilter').value;
+    const limit = document.getElementById('limitFilter').value;
+    
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Loading logs...</td></tr>';
+    
+    let url = `/api/logs?limit=${limit}`;
+    if (actionFilter) {
+        url += `&action=${actionFilter}`;
+    }
+    
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No logs found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = '';
+            data.forEach(log => {
+                const row = document.createElement('tr');
+                const actionIcon = getActionIcon(log.action);
+                const badgeClass = getActionBadge(log.action);
+                
+                row.innerHTML = `
+                    <td><small class="text-muted">${formatTimestamp(log.timestamp)}</small></td>
+                    <td><strong>${log.username}</strong></td>
+                    <td>
+                        ${actionIcon}
+                        <span class="badge bg-${badgeClass} badge-action">${log.action.replace(/_/g, ' ')}</span>
+                    </td>
+                    <td>${log.target_type || '-'}</td>
+                    <td class="log-details">${log.details || '-'}</td>
+                    <td><small class="text-muted">${log.ip_address || '-'}</small></td>
+                `;
+                tbody.appendChild(row);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading logs:', error);
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4"><i class="fas fa-exclamation-triangle"></i> Error loading logs</td></tr>';
+        });
+}
+
+function resetFilters() {
+    document.getElementById('actionFilter').value = '';
+    document.getElementById('limitFilter').value = '100';
+    loadLogs();
+}
+
+// Load logs on page load
+document.addEventListener('DOMContentLoaded', loadLogs);
+
+// Auto-refresh every 30 seconds
+setInterval(loadLogs, 30000);
+</script>
+{% endblock %}

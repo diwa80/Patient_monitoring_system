@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL CHECK(role IN ('admin', 'nurse')),
     menu_permissions TEXT,
     status TEXT NOT NULL DEFAULT 'active',
+    failed_login_attempts INTEGER DEFAULT 0,
+    locked_at DATETIME,
+    last_login_attempt DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -57,11 +60,25 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id),
+    username TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target_type TEXT,
+    target_id INTEGER,
+    details TEXT,
+    ip_address TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_readings_bed_timestamp ON readings(bed_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_alerts_bed_status ON alerts(bed_id, status);
 CREATE INDEX IF NOT EXISTS idx_nurse_assignments_nurse ON nurse_assignments(nurse_id);
 CREATE INDEX IF NOT EXISTS idx_nurse_assignments_bed ON nurse_assignments(bed_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id, timestamp DESC);
 
 -- Insert default settings
 INSERT OR IGNORE INTO settings (key, value) VALUES 
@@ -73,8 +90,8 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('no_motion_timeout_minutes', '30'),
     ('fall_drop_threshold_cm', '30.0'),
     ('restlessness_motions_per_hour', '20.0'),
-    ('fever_temp_threshold', '37.5'),
-    ('fever_temp_increase', '1.5'),
+    ('restlessness_start_time', '22:00'),
+    ('restlessness_end_time', '06:00'),
     ('low_humidity_danger', '30.0'),
     ('high_humidity_danger', '70.0');
 

@@ -364,6 +364,9 @@
 
                 tbody.innerHTML = '';
                 data.forEach(user => {
+                    const isLocked = user.locked_at !== null;
+                    const lockBadge = isLocked ? '<span class="badge bg-danger ms-1"><i class="fas fa-lock"></i> Locked</span>' : '';
+                    
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td><strong>${user.username}</strong></td>
@@ -372,6 +375,7 @@
                             <span class="badge bg-${user.status === 'active' ? 'success' : 'secondary'}">
                                 ${user.status}
                             </span>
+                            ${lockBadge}
                         </td>
                         <td>${new Date(user.created_at).toLocaleDateString()}</td>
                         <td>
@@ -387,6 +391,7 @@
                             <button class="btn btn-sm btn-warning me-1" onclick="toggleUser(${user.id}, '${user.status}')">
                                 ${user.status === 'active' ? '<i class="fas fa-ban"></i> Disable' : '<i class="fas fa-check"></i> Enable'}
                             </button>
+                            ${isLocked ? `<button class="btn btn-sm btn-success me-1" onclick="unlockUser(${user.id})"><i class="fas fa-unlock"></i> Unlock</button>` : ''}
                             
                         </td>
                     `;
@@ -877,6 +882,23 @@
 </style>
 
 <script>
+    // Unlock User Account
+    function unlockUser(userId) {
+        if (confirm('Are you sure you want to unlock this account? This will reset failed login attempts.')) {
+            fetch(`/users/${userId}/unlock`, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        alert('Account unlocked successfully');
+                        loadUsers();
+                    } else {
+                        alert('Error: ' + (data.error || 'Unknown'));
+                    }
+                })
+                .catch(() => alert('Network error'));
+        }
+    }
+
     // Change Password Form Submission
     const changePasswordForm = document.getElementById('changePasswordForm');
     if (changePasswordForm) {
